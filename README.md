@@ -1,46 +1,6 @@
 # Hyperactive//2026 Radio
 
-A mixer or line source plugs into the transmitter; receivers in range receive and play it back in real time. One transmitter, many receivers, acknowledgement.
-
-```
-┌─────────────┐   1/4" TRS   ┌──────────┐  I2S/DMA  ┌─────────────────────────────┐
-│    Mixer    │ ──────-─────► │ PCM1808  │ ──-──────► │          RP2350             │
-│  line out   │              │   ADC    │            │                             │
-└─────────────┘              └──────────┘            │  Opus encode (64 kbps)      │
-                                                     │  20 ms frames, stereo       │
-                                                     │  48 kHz, complexity 5       │
-                                                     └──────────┬──────────────────┘
-                                                                │ SPI
-                                                                ▼
-                                                     ┌──────────────────┐
-                                                     │     SX1276       │
-                                                     │  915 MHz GFSK    │
-                                                     │  100 kbps        │
-                                                     │  +20 dBm         │
-                                                     └────────┬─────────┘
-                                                              │ RF
-                                                              ▼
-                                                         [ antenna ]
-                                                              │
-                                                              ▼
-                                                     ┌────────────────┐
-                                                     │    SX1276      │
-                                                     │  (receiver)    │
-                                                     └───────┬────────┘
-                                                             │ SPI
-                                                             ▼
-                                          ┌──────────────────────────────┐
-                                          │          RP2350              │
-                                          │                              │
-                                          │  Opus decode (64 kbps)       │
-                                          │  20 ms frames, stereo        │
-                                          └──────────┬───────────────────┘
-                                                     │ I2S/DMA
-                                                     ▼
-                                          ┌──────────────────┐   audio out
-                                          │      DAC         │ ──────────────►
-                                          └──────────────────┘
-```
+Experimental real-time, long-range, high-quality, wireless digital audio for Hyperactive 2026.
 
 ## Audio quality
 
