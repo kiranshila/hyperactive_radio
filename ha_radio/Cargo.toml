@@ -1,0 +1,47 @@
+[package]
+name = "ha_radio"
+version = "0.0.0"
+edition = "2024"
+
+[[bin]]
+name = "ha_radio"
+path = "src/bin/main.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "bench"
+path = "src/bin/bench.rs"
+test = false
+bench = false
+
+[dependencies]
+embedded-opus = { path = "../embedded-opus", default-features = false }
+defmt = "1"
+defmt-rtt = "1"
+panic-probe = { version = "1", features = ["print-defmt"] }
+embedded-hal = "1"
+embedded-hal-async = "1"
+cortex-m-rt = "0.7"
+embassy-executor = { version = "0.9", features = [
+    "arch-cortex-m",
+    "executor-thread",
+    "defmt",
+    "executor-interrupt",
+    "nightly",
+] }
+embassy-sync = { version = "0.7", features = ["defmt"] }
+embassy-time = { version = "0.5", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+] }
+cortex-m = "0.7"
+embassy-rp = { version = "0.9", features = [
+    "defmt",
+    "unstable-pac",
+    "time-driver",
+    "critical-section-impl",
+    "rp235xa",
+    "binary-info",
+] }
+embassy-embedded-hal = { version = "0.5" }

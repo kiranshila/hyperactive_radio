@@ -1,0 +1,7 @@
+[package]
+name = "embedded-opus"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+opus-sys = { path = "../opus-sys", default-features = false }
