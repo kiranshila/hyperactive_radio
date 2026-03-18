@@ -34,7 +34,7 @@ const TARGET_BITRATE: i32 = 64_000;
 const fn generate_bench_pcm() -> [i16; 48_000 * 2] {
     let mut out = [0i16; 48_000 * 2];
     let mut state_l: u32 = 0xDEAD_BEEF;
-    let mut state_r: u32 = 0xCAFE_BABE;
+    let mut state_r: u32 = 0xB0BA_CAFE;
     let mut i = 0usize;
     while i < 48_000 {
         state_l = state_l.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -51,7 +51,7 @@ static BENCH_PCM: [i16; 48_000 * 2] = generate_bench_pcm();
 static ENCODER_STATE: StaticCell<[u8; ENCODER_STATE_SIZE_STEREO]> = StaticCell::new();
 static DECODER_STATE: StaticCell<[u8; DECODER_STATE_SIZE_STEREO]> = StaticCell::new();
 
-// DWT.CYCCNT ticks at the CPU clock (150 MHz on RP2350)
+// DWT.CYCCNT ticks at the CPU clock
 fn bench<F: FnMut()>(name: &str, iterations: u32, mut body: F) {
     let mut min = u32::MAX;
     let mut max = u32::MIN;
