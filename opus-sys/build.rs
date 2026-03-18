@@ -172,10 +172,15 @@ fn main() {
         .define("HAVE_LRINT", None)
         .define("OPUS_ARM_INLINE_EDSP", None)
         .define("OPUS_ARM_INLINE_MEDIA", None)
+        .define("OPUS_ARM_PRESUME_EDSP", None)
+        .define("OPUS_ARM_PRESUME_MEDIA", None)
         .flag("-include")
         .flag("src/alloc.h")
+        .flag("-Wno-stringop-overflow")
         .flag("-fvisibility=hidden")
+        .flag("-ffast-math")
         .flag("-march=armv8-m.main+dsp+fp")
+        .flag("-mtune=cortex-m33")
         .compile("opus");
 
     println!("cargo:rerun-if-changed=build.rs");

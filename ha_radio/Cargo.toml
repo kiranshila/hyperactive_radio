@@ -45,3 +45,4 @@ embassy-rp = { version = "0.9", features = [
     "binary-info",
 ] }
 embassy-embedded-hal = { version = "0.5" }
+static_cell = "2"
