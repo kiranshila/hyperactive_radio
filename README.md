@@ -33,8 +33,12 @@ End-to-end latency is approximately one frame (20 ms) of algorithmic delay plus 
 
 ### Regulatory (FCC Part 15.247)
 
-No frequency hopping required. Part 15.247 has two compliance paths — FHSS is one, but **digital modulation** is the other: ≥ 500 kHz of 6 dB occupied bandwidth, up to +30 dBm EIRP, fixed frequency, no duty cycle restriction.
-GFSK at 100 kbps with ±50 kHz deviation clears 500 kHz easily, so the system sits on a single channel continuously at +20 dBm and is fully unlicensed-legal.
+No frequency hopping required. Part 15.247 has two compliance paths — FHSS is one, but **digital modulation** is the other: fixed frequency, up to +30 dBm EIRP, with two constraints:
+
+- **6 dB bandwidth ≥ 500 kHz** — requires high frequency deviation; at 100 kbps, ±200 kHz deviation gets you there (`BW_6dB ≈ 2 × f_dev + bit_rate`). Lower deviation (e.g. ±50 kHz) only yields ~200 kHz and does not qualify.
+- **PSD ≤ 8 dBm in any 3 kHz band** — GFSK spectral peaks at ±f_dev must stay under this limit at the chosen TX power.
+
+The exact deviation and power settings need to be verified against both constraints once the RF configuration is finalised. At +20 dBm with sufficiently high deviation the path is viable, but the numbers need to be checked.
 
 ### Packet structure
 

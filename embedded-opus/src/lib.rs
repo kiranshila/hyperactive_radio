@@ -137,16 +137,59 @@ impl<'buf> Decoder<'buf> {
         Ok(Self { state, channels })
     }
 
+    pub fn set_ignore_extensions(&mut self, ignore: bool) -> Result<(), Error> {
+        let ret = unsafe {
+            sys::opus_decoder_ctl(
+                self.state,
+                sys::OPUS_SET_IGNORE_EXTENSIONS_REQUEST,
+                ignore as i32,
+            )
+        };
+        if ret != sys::OPUS_OK {
+            Err(Error::from_code(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Decode an Opus packet into PCM samples.
+    /// An empty `packet` slice triggers Packet Loss Concealment (PLC),
+    /// which interpolates audio from the decoder's internal state.
     pub fn decode(&mut self, packet: &[u8], pcm: &mut [i16], fec: bool) -> Result<usize, Error> {
+        let frame_size = (pcm.len() / self.channels) as i32;
+        let (ptr, len) = if packet.is_empty() {
+            (core::ptr::null(), 0)
+        } else {
+            (packet.as_ptr(), packet.len() as i32)
+        };
+        let ret = unsafe {
+            sys::opus_decode(
+                self.state,
+                ptr,
+                len,
+                pcm.as_mut_ptr(),
+                frame_size,
+                fec as i32,
+            )
+        };
+        if ret < 0 {
+            Err(Error::from_code(ret))
+        } else {
+            Ok(ret as usize)
+        }
+    }
+
+    /// Generate a frame with "packet loss concealment"
+    pub fn plc(&mut self, pcm: &mut [i16]) -> Result<usize, Error> {
         let frame_size = (pcm.len() / self.channels) as i32;
         let ret = unsafe {
             sys::opus_decode(
                 self.state,
-                packet.as_ptr(),
-                packet.len() as i32,
+                core::ptr::null(),
+                0,
                 pcm.as_mut_ptr(),
                 frame_size,
-                fec as i32,
+                0,
             )
         };
         if ret < 0 {

@@ -4,39 +4,58 @@ version = "0.0.0"
 edition = "2024"
 
 [[bin]]
-name = "ha_radio"
-path = "src/bin/main.rs"
+name = "tx"
+path = "src/tx.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "rx"
+path = "src/rx.rs"
 test = false
 bench = false
 
 [[bin]]
 name = "bench"
-path = "src/bin/bench.rs"
+path = "src/bench.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "singlecore_loopback"
+path = "src/singlecore_loopback.rs"
 test = false
 bench = false
 
 [dependencies]
 embedded-opus = { path = "../embedded-opus", default-features = false }
+sx127x = { path = "../sx127x" }
 defmt = "1"
 defmt-rtt = "1"
 panic-probe = { version = "1", features = ["print-defmt"] }
+fixed = "1.28"
 embedded-hal = "1"
 embedded-hal-async = "1"
 cortex-m-rt = "0.7"
-embassy-executor = { version = "0.9", features = [
-    "arch-cortex-m",
+cortex-m = "0.7"
+static_cell = "2"
+log = "0.4"
+bytemuck = "1"
+
+# Embassy Crates
+embassy-executor = { version = "0.10", features = [
+    "platform-cortex-m",
     "executor-thread",
     "defmt",
     "executor-interrupt",
     "nightly",
 ] }
-embassy-sync = { version = "0.7", features = ["defmt"] }
+embassy-sync = { version = "0.8", features = ["defmt"] }
 embassy-time = { version = "0.5", features = [
     "defmt",
     "defmt-timestamp-uptime",
 ] }
-cortex-m = "0.7"
-embassy-rp = { version = "0.9", features = [
+embassy-rp = { version = "0.10", features = [
     "defmt",
     "unstable-pac",
     "time-driver",
@@ -44,5 +63,11 @@ embassy-rp = { version = "0.9", features = [
     "rp235xa",
     "binary-info",
 ] }
-embassy-embedded-hal = { version = "0.5" }
-static_cell = "2"
+embassy-embedded-hal = { version = "0.6", features = ["defmt"] }
+embassy-usb-logger = { version = "0.6" }
+embassy-usb = { version = "0.6" }
+embassy-futures = { version = "0.1", features = ["defmt"] }
+
+# Display
+ssd1306 = { version = "0.10", features = ["async"] }
+embedded-graphics = "0.8"

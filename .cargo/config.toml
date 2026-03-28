@@ -1,23 +1,29 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
+#runner = "elf2uf2-rs deploy -t -s --family rp2350-arm-s"
 runner = "probe-rs run --chip RP235x"
-#runner = "elf2flash -f -s -t --family 0xe48bff59"
 rustflags = [
-  "-C", "linker=flip-link",
-  "-C", "link-arg=-Tlink.x",
-  "-C", "link-arg=-Tdefmt.x",
+    "-C",
+    "linker=flip-link",
+    "-C",
+    "link-arg=-Tlink.x",
+    "-C",
+    "link-arg=-Tdefmt.x",
 
-  # Code-size optimizations.
-  #   trap unreachable can save a lot of space, but requires nightly compiler.
-  #   uncomment the next line if you wish to enable it
-  "-Z", "trap-unreachable=no",
+    # Code-size optimizations.
+    #   trap unreachable can save a lot of space, but requires nightly compiler.
+    #   uncomment the next line if you wish to enable it
+    "-Z",
+    "trap-unreachable=no",
 
-  # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x
-  # See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
-  "-C", "link-arg=--nmagic",
+    # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x
+    # See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
+    "-C",
+    "link-arg=--nmagic",
 
-  # Target the actual CPU so LLVM emits DSP/FPU instructions.
-  # thumbv8m.main alone is the generic ARMv8-M baseline; cortex-m33 adds +dsp+fp.
-  "-C", "target-cpu=cortex-m33",
+    # Target the actual CPU so LLVM emits DSP/FPU instructions.
+    # thumbv8m.main alone is the generic ARMv8-M baseline; cortex-m33 adds +dsp+fp.
+    "-C",
+    "target-cpu=cortex-m33",
 ]
 
 [build]
@@ -26,4 +32,3 @@ target = "thumbv8m.main-none-eabihf"
 [env]
 DEFMT_LOG = "info"
 CC_thumbv8m_main_none_eabihf = "arm-none-eabi-gcc"
-

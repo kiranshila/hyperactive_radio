@@ -14,7 +14,7 @@ use embedded_opus::{
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
-const CLOCK_MHZ: u32 = 270;
+const CLOCK_HZ: u32 = 153_600_000;
 const SAMPLE_RATE: i32 = 48_000;
 const CHANNELS: usize = 2;
 const FRAME_SAMPLES: usize = 960 * CHANNELS; // 20ms stereo
@@ -77,15 +77,17 @@ fn bench<F: FnMut()>(name: &str, iterations: u32, mut body: F) {
         min,
         avg,
         max,
-        avg / CLOCK_MHZ
+        avg / (CLOCK_HZ / 1_000_000)
     );
 }
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let mut config = Config::default();
-    config.clocks = ClockConfig::system_freq(CLOCK_MHZ * 1_000_000).unwrap();
+    config.clocks = ClockConfig::system_freq(CLOCK_HZ).unwrap();
     let _p = embassy_rp::init(config);
+
+    info!("Clock Speed: {} Hz", embassy_rp::clocks::clk_sys_freq());
 
     let mut core = cortex_m::Peripherals::take().unwrap();
     core.DCB.enable_trace();
@@ -101,7 +103,7 @@ async fn main(_spawner: Spawner) {
     )
     .unwrap();
     encoder.set_bitrate(TARGET_BITRATE).unwrap();
-    encoder.set_complexity(5).unwrap();
+    encoder.set_complexity(0).unwrap();
 
     info!("--- benchmarks start ---");
 

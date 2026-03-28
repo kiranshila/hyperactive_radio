@@ -13,6 +13,7 @@ pub const OPUS_ALLOC_FAIL: i32 = -7;
 // Encoder CTL request codes
 pub const OPUS_SET_BITRATE_REQUEST: i32 = 4002;
 pub const OPUS_SET_COMPLEXITY_REQUEST: i32 = 4010;
+pub const OPUS_SET_IGNORE_EXTENSIONS_REQUEST: i32 = 4058;
 
 // Sentinel bitrate values
 pub const OPUS_AUTO: i32 = -1000;
@@ -60,6 +61,9 @@ unsafe extern "C" {
 
     // Encoder CTL — variadic; concrete call sites always pass one i32 value
     pub fn opus_encoder_ctl(st: *mut OpusEncoder, request: i32, ...) -> i32;
+
+    // Decoder CTL — variadic; concrete call sites always pass one i32 value
+    pub fn opus_decoder_ctl(st: *mut OpusDecoder, request: i32, ...) -> i32;
 
     // Utility
     pub fn opus_strerror(error: i32) -> *const core::ffi::c_char;

@@ -25,6 +25,20 @@
 
         inherit (pkgs) lib;
 
+        elf2uf2-rs = pkgs.rustPlatform.buildRustPackage {
+          pname = "elf2uf2-rs";
+          version = "git";
+          src = pkgs.fetchFromGitHub {
+            owner = "jonil";
+            repo = "elf2uf2-rs";
+            rev = "master";
+            hash = "sha256-UkB3papVAyr5wxXBp4erzL25W2pXf52Ud0cbi6PtqLo=";
+          };
+          cargoHash = "sha256-A2PORcFt2rO+ZekyLIjNTpcpyhzx5up10HEa88n5Su8=";
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs = [ pkgs.udev ];
+        };
+
         rustToolchainFor = p: p.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
@@ -41,37 +55,18 @@
           ];
         };
 
-        # elf2uf2 has been abandonded, so we'll use a fork
-        elf2uf2 = pkgs.rustPlatform.buildRustPackage rec {
-          pname = "elf2flash";
-          version = "0.1.0";
-          src = pkgs.fetchCrate {
-            inherit pname version;
-            hash = "sha256-XSqH4qRNj6jTykEGHPCcI7z0m+B4iNCz/vu39UIYiPs=";
-          };
-          cargoHash = "sha256-nfkVLzMF09d8gofvgZvIVTq6I1YH5hDmcBYqlw8SEQ4=";
-          nativeBuildInputs = with pkgs; [
-            pkg-config
-          ];
-          buildInputs = with pkgs; [udev];
-        };
-
         commonArgs = {
           inherit src;
           strictDeps = true;
           doCheck = false;
           nativeBuildInputs = with pkgs; [
             flip-link
-            elf2uf2
           ];
         };
 
         asp_link = craneLib.buildPackage (commonArgs
           // {
             cargoArtifacts = null;
-            postInstall = ''
-              elf2flash convert --board rp2350 $out/bin/ha_radio $out/bin/ha_radio.uf2
-            '';
           });
       in {
         checks = {
@@ -84,6 +79,8 @@
             cargo-outdated
             probe-rs-tools
             gcc-arm-embedded
+            elf2uf2-rs
+            tio
           ];
         };
       }

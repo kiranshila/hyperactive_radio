@@ -156,6 +156,7 @@ fn main() {
         .chain(["src/alloc.c"].iter().map(PathBuf::from));
 
     cc::Build::new()
+        .debug(true)
         .files(all_sources)
         .include(opus.join("include"))
         .include(opus.join("celt"))

@@ -1,19 +1,25 @@
 [workspace]
-members = [
-    "ha_radio",
-    "opus-sys",
-    "embedded-opus",
-]
+members = ["ha_radio", "opus-sys", "embedded-opus", "sx127x"]
 resolver = "2"
 
 [profile.release]
 debug = 2
 lto = true
 opt-level = 3
-codegen-units = 1
 panic = "abort"
 
 [profile.dev]
 debug = 2
 lto = true
 opt-level = 3
+
+[patch.crates-io]
+# Patch all the embassy crates to source from git
+embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy" }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy" }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy" }
+embassy-usb-logger = { git = "https://github.com/embassy-rs/embassy" }
