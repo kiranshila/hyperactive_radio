@@ -119,6 +119,9 @@ async fn radio_rx_task(
                     if len > OPUS_BUF_SIZE {
                         ERR_COUNT.fetch_add(1, Ordering::Relaxed);
                         warn!("radio: pkt too large {}", len);
+                        let opus = tx.send().await;
+                        opus.len = 0;
+                        tx.send_done();
                         continue;
                     }
                     // info!("rx: len={}", len);
