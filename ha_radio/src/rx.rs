@@ -95,43 +95,61 @@ async fn radio_rx_task(
     rst.set_high();
     Timer::after_millis(10).await;
 
-    let version = radio.read_version().await.unwrap();
-    info!("radio: version=0x{:02x} (expect 0x12)", version);
-
-    let gfsk_cfg = GfskRxConfig {
-        frequency_hz: RADIO_FREQ_HZ,
-        bitrate_bps: RADIO_BITRATE_BPS,
-        sync_word: RADIO_SYNC_WORD,
-    };
-    radio.configure_gfsk_rx(&gfsk_cfg).await.unwrap();
-    info!("radio: configured for rx");
-
-    let mut pkt_buf = [0u8; 255];
     loop {
-        match radio.receive(&mut dio0, &mut pkt_buf).await {
-            Ok(len) => {
-                let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
-                RSSI_DBM.store(rssi, Ordering::Relaxed);
-                if len > OPUS_BUF_SIZE {
-                    ERR_COUNT.fetch_add(1, Ordering::Relaxed);
-                    warn!("radio: pkt too large {}", len);
-                    continue;
+        let version = radio.read_version().await.unwrap();
+        info!("radio: version=0x{:02x} (expect 0x12)", version);
+
+        let gfsk_cfg = GfskRxConfig {
+            frequency_hz: RADIO_FREQ_HZ,
+            bitrate_bps: RADIO_BITRATE_BPS,
+            sync_word: RADIO_SYNC_WORD,
+        };
+        radio.configure_gfsk_rx(&gfsk_cfg).await.unwrap();
+        info!("radio: configured for rx");
+
+        let mut pkt_buf = [0u8; 255];
+        let mut timeouts = 0;
+        'rx: loop {
+            match radio.receive(&mut dio0, &mut pkt_buf).await {
+                Ok(len) => {
+                    timeouts = 0;
+
+                    let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
+                    RSSI_DBM.store(rssi, Ordering::Relaxed);
+                    if len > OPUS_BUF_SIZE {
+                        ERR_COUNT.fetch_add(1, Ordering::Relaxed);
+                        warn!("radio: pkt too large {}", len);
+                        continue;
+                    }
+                    // info!("rx: len={}", len);
+                    // info!("rx: rssi={}dBm", rssi);
+                    PKT_COUNT.fetch_add(1, Ordering::Relaxed);
+                    let opus = tx.send().await;
+                    opus.data[..len].copy_from_slice(&pkt_buf[..len]);
+                    opus.len = len;
+                    tx.send_done();
                 }
-                info!("rx: len={}", len);
-                PKT_COUNT.fetch_add(1, Ordering::Relaxed);
-                let opus = tx.send().await;
-                opus.data[..len].copy_from_slice(&pkt_buf[..len]);
-                opus.len = len;
-                tx.send_done();
-            }
-            Err(sx127x::Error::Timeout) => {
-                let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
-                RSSI_DBM.store(rssi, Ordering::Relaxed);
-                info!("radio: rx timeout rssi={}dBm", rssi);
-            }
-            Err(e) => {
-                ERR_COUNT.fetch_add(1, Ordering::Relaxed);
-                warn!("radio: rx err {}", defmt::Debug2Format(&e));
+                Err(sx127x::Error::Timeout) => {
+                    let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
+                    RSSI_DBM.store(rssi, Ordering::Relaxed);
+
+                    timeouts += 1;
+                    info!("radio: rx timeout #{} rssi={}dBm", timeouts, rssi);
+                    if timeouts > 10 {
+                        break 'rx;
+                    }
+                }
+                Err(sx127x::Error::CrcError) => {
+                    warn!("radio: rx CRC error");
+                    // send an empty packet to trigger PLC
+                    let opus = tx.send().await;
+                    opus.len = 0;
+                    tx.send_done();
+                }
+                Err(e) => {
+                    ERR_COUNT.fetch_add(1, Ordering::Relaxed);
+                    warn!("radio: rx err {}", defmt::Debug2Format(&e));
+                }
             }
         }
     }
@@ -149,9 +167,23 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
         let pcm: &mut [i16] = bytemuck::cast_slice_mut(pcm.as_mut_slice());
         match decoder.decode(&opus.data[0..opus.len], pcm, false) {
             Ok(_len) => {}
-            Err(_e) => {
-                error!("decode: failed");
-                decoder.plc(pcm).ok();
+            Err(e) => {
+                error!(
+                    "decode: failed ({})",
+                    match e {
+                        embedded_opus::Error::BadArg => "bad argument",
+                        embedded_opus::Error::BufferTooSmall => "buffer too small",
+                        embedded_opus::Error::InternalError => "internal error",
+                        embedded_opus::Error::InvalidPacket => "invalid packet",
+                        embedded_opus::Error::Unimplemented => "unimplemented (?)",
+                        embedded_opus::Error::InvalidState => "invalid state",
+                        embedded_opus::Error::AllocFail => "allocation failure",
+                        _ => "!?",
+                    }
+                );
+                if let Err(_) = decoder.plc(pcm) {
+                    error!("decode: loss concealment failed");
+                }
             }
         }
         rx.receive_done();
