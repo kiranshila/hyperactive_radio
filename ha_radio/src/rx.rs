@@ -143,6 +143,7 @@ async fn radio_rx_task(
                     }
                 }
                 Err(sx127x::Error::CrcError) => {
+                    ERR_COUNT.fetch_add(1, Ordering::Relaxed);
                     warn!("radio: rx CRC error");
                     // send an empty packet to trigger PLC
                     let opus = tx.send().await;
