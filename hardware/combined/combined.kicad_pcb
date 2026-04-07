@@ -10780,6 +10780,17 @@
 			(uuid "dbc9138d-c00d-433a-a97c-335a0b6d7612")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/Pantalla OLED 0.96'' 128x64.stp"
+			(offset
+				(xyz 13 12.3 2.5)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz -0 -0 -0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0805_2012Metric"
 		(layer "F.Cu")
