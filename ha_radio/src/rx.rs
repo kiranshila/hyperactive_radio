@@ -107,9 +107,14 @@ async fn radio_rx_task(
     info!("radio: configured for rx");
 
     let mut pkt_buf = [0u8; 255];
+    // Count consecutive receive() failures so we can force a full
+    // re-configure after a sustained dropout.  Resets to 0 on any
+    // successful packet.
+    let mut consecutive_failures: u32 = 0;
     loop {
         match radio.receive(&mut dio0, &mut pkt_buf).await {
             Ok(len) => {
+                consecutive_failures = 0;
                 let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
                 RSSI_DBM.store(rssi, Ordering::Relaxed);
                 if len > OPUS_BUF_SIZE {
@@ -125,11 +130,25 @@ async fn radio_rx_task(
                 tx.send_done();
             }
             Err(sx127x::Error::Timeout) => {
+                consecutive_failures += 1;
                 let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
                 RSSI_DBM.store(rssi, Ordering::Relaxed);
-                info!("radio: rx timeout rssi={}dBm", rssi);
+                info!("radio: rx timeout rssi={}dBm (fail#{})", rssi, consecutive_failures);
+                // After 5 consecutive 1-second timeouts (~5 s of silence),
+                // force a full reconfiguration.  The minimal recovery inside
+                // receive() (FifoOverrun + Mode::Rx write) may not be enough
+                // if the radio's internal FSM is confused — configure_gfsk_rx
+                // runs the proper Sleep → Standby → Rx sequence with PLL-lock
+                // wait, which is the only reliable way to recover.
+                if consecutive_failures % 5 == 0 {
+                    warn!("radio: reconfiguring after {} timeouts", consecutive_failures);
+                    if let Err(e) = radio.configure_gfsk_rx(&gfsk_cfg).await {
+                        warn!("radio: reconfigure failed: {}", defmt::Debug2Format(&e));
+                    }
+                }
             }
             Err(e) => {
+                consecutive_failures += 1;
                 ERR_COUNT.fetch_add(1, Ordering::Relaxed);
                 warn!("radio: rx err {}", defmt::Debug2Format(&e));
             }

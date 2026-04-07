@@ -701,9 +701,17 @@ impl<S: SpiDevice> Sx127x<S> {
                     .write_async(|w| w.set_fifo_overrun(true))
                     .await?;
                 self.clear_irq_flags().await?;
+                // Use write_async (not modify_async) to set all op_mode fields
+                // explicitly.  modify_async does a read-modify-write; if the
+                // SPI read returns a bad value the LongRangeMode bit could be
+                // set, permanently switching the chip into LoRa mode.
                 self.device
                     .op_mode()
-                    .modify_async(|w| w.set_mode(Mode::Rx))
+                    .write_async(|w| {
+                        w.set_modulation_type(ModulationType::FskOok);
+                        w.set_low_frequency_mode_on(false);
+                        w.set_mode(Mode::Rx);
+                    })
                     .await?;
                 return Err(Error::Timeout);
             }
@@ -717,12 +725,20 @@ impl<S: SpiDevice> Sx127x<S> {
         debug!("sx127x: activity detected, len byte={}", len);
 
         if len == 0 || len > buf.len() {
-            // Invalid length — clear the FIFO so the radio can auto-restart.
-            // (Auto-restart only fires after FIFO is empty; leaving bytes
-            // would stall reception indefinitely.)
+            // Invalid length — flush and reset identically to other error paths
+            // so the radio is guaranteed to be back in a clean Rx state.
             self.device
                 .irq_flags_2()
                 .write_async(|w| w.set_fifo_overrun(true))
+                .await?;
+            self.clear_irq_flags().await?;
+            self.device
+                .op_mode()
+                .write_async(|w| {
+                    w.set_modulation_type(ModulationType::FskOok);
+                    w.set_low_frequency_mode_on(false);
+                    w.set_mode(Mode::Rx);
+                })
                 .await?;
             return Err(Error::InvalidPacket);
         }
@@ -795,9 +811,15 @@ impl<S: SpiDevice> Sx127x<S> {
                 .write_async(|w| w.set_fifo_overrun(true))
                 .await?;
             self.clear_irq_flags().await?;
+            // write_async (not modify_async) to avoid corrupting LongRangeMode
+            // if the SPI read returns a bad value.
             self.device
                 .op_mode()
-                .modify_async(|w| w.set_mode(Mode::Rx))
+                .write_async(|w| {
+                    w.set_modulation_type(ModulationType::FskOok);
+                    w.set_low_frequency_mode_on(false);
+                    w.set_mode(Mode::Rx);
+                })
                 .await?;
         }
 
