@@ -87,62 +87,57 @@ async fn radio_rx_task(
     rst.set_high();
     Timer::after_millis(10).await;
 
-    let version = radio.read_version().await.unwrap();
-    info!("radio: version=0x{:02x} (expect 0x12)", version);
-
-    let gfsk_cfg = GfskRxConfig {
-        frequency_hz: RADIO_FREQ_HZ,
-        bitrate_bps: RADIO_BITRATE_BPS,
-        sync_word: RADIO_SYNC_WORD,
-    };
-    radio.configure_gfsk_rx(&gfsk_cfg).await.unwrap();
-    info!("radio: configured for rx");
-
-    let mut pkt_buf = [0u8; 255];
-    // Count consecutive receive() failures so we can force a full
-    // re-configure after a sustained dropout.  Resets to 0 on any
-    // successful packet.
-    let mut consecutive_failures: u32 = 0;
     loop {
-        match radio.receive(&mut dio0, &mut pkt_buf).await {
-            Ok(len) => {
-                consecutive_failures = 0;
-                if len > OPUS_BUF_SIZE {
-                    warn!("radio: pkt too large {}", len);
-                    continue;
+        let version = radio.read_version().await.unwrap();
+        info!("radio: version=0x{:02x} (expect 0x12)", version);
+
+        let gfsk_cfg = GfskRxConfig {
+            frequency_hz: RADIO_FREQ_HZ,
+            bitrate_bps: RADIO_BITRATE_BPS,
+            sync_word: RADIO_SYNC_WORD,
+        };
+        radio.configure_gfsk_rx(&gfsk_cfg).await.unwrap();
+        info!("radio: configured for rx");
+
+        let mut pkt_buf = [0u8; 255];
+        let mut timeouts = 0;
+        'rx: loop {
+            match radio.receive(&mut dio0, &mut pkt_buf).await {
+                Ok(len) => {
+                    timeouts = 0;
+                    if len > OPUS_BUF_SIZE {
+                        warn!("radio: pkt too large {}", len);
+                        let mut opus = tx.send().await;
+                        opus.len = 0;
+                        opus.send_done();
+                        continue;
+                    }
+                    // info!("rx: len={}", len);
+                    // info!("rx: rssi={}dBm", rssi);
+                    let mut opus = tx.send().await;
+                    opus.data[..len].copy_from_slice(&pkt_buf[..len]);
+                    opus.len = len;
+                    opus.send_done();
                 }
-                info!("rx: len={}", len);
-                let mut opus = tx.send().await;
-                opus.data[..len].copy_from_slice(&pkt_buf[..len]);
-                opus.len = len;
-                opus.send_done();
-            }
-            Err(sx127x::Error::Timeout) => {
-                consecutive_failures += 1;
-                let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
-                info!(
-                    "radio: rx timeout rssi={}dBm (fail#{})",
-                    rssi, consecutive_failures
-                );
-                // After 5 consecutive 1-second timeouts (~5 s of silence),
-                // force a full reconfiguration.  The minimal recovery inside
-                // receive() (FifoOverrun + Mode::Rx write) may not be enough
-                // if the radio's internal FSM is confused — configure_gfsk_rx
-                // runs the proper Sleep → Standby → Rx sequence with PLL-lock
-                // wait, which is the only reliable way to recover.
-                if consecutive_failures % 5 == 0 {
-                    warn!(
-                        "radio: reconfiguring after {} timeouts",
-                        consecutive_failures
-                    );
-                    if let Err(e) = radio.configure_gfsk_rx(&gfsk_cfg).await {
-                        warn!("radio: reconfigure failed: {}", defmt::Debug2Format(&e));
+                Err(sx127x::Error::Timeout) => {
+                    let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
+
+                    timeouts += 1;
+                    info!("radio: rx timeout #{} rssi={}dBm", timeouts, rssi);
+                    if timeouts > 10 {
+                        break 'rx;
                     }
                 }
-            }
-            Err(e) => {
-                consecutive_failures += 1;
-                warn!("radio: rx err {}", defmt::Debug2Format(&e));
+                Err(sx127x::Error::CrcError) => {
+                    warn!("radio: rx CRC error");
+                    // send an empty packet to trigger PLC
+                    let mut opus = tx.send().await;
+                    opus.len = 0;
+                    opus.send_done();
+                }
+                Err(e) => {
+                    warn!("radio: rx err {}", defmt::Debug2Format(&e));
+                }
             }
         }
     }
@@ -160,9 +155,23 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
         let pcm: &mut [i16] = bytemuck::cast_slice_mut(&mut (*pcm_slot));
         match decoder.decode(&opus.data[0..opus.len], pcm, false) {
             Ok(_len) => {}
-            Err(_e) => {
-                error!("decode: failed");
-                decoder.plc(pcm).ok();
+            Err(e) => {
+                error!(
+                    "decode: failed ({})",
+                    match e {
+                        embedded_opus::Error::BadArg => "bad argument",
+                        embedded_opus::Error::BufferTooSmall => "buffer too small",
+                        embedded_opus::Error::InternalError => "internal error",
+                        embedded_opus::Error::InvalidPacket => "invalid packet",
+                        embedded_opus::Error::Unimplemented => "unimplemented (?)",
+                        embedded_opus::Error::InvalidState => "invalid state",
+                        embedded_opus::Error::AllocFail => "allocation failure",
+                        _ => "!?",
+                    }
+                );
+                if let Err(_) = decoder.plc(pcm) {
+                    error!("decode: loss concealment failed");
+                }
             }
         }
         opus.receive_done();

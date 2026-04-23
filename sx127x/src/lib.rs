@@ -571,6 +571,7 @@ impl<S: SpiDevice> Sx127x<S> {
             .write_async(|w| {
                 w.set_packet_format(true); // variable length
                 w.set_crc_on(true);
+                w.set_crc_auto_clear_off(true); // we check crc_ok ourselves
             })
             .await?;
         self.device
