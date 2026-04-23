@@ -16,12 +16,6 @@ test = false
 bench = false
 
 [[bin]]
-name = "bench"
-path = "src/bench.rs"
-test = false
-bench = false
-
-[[bin]]
 name = "singlecore_loopback"
 path = "src/singlecore_loopback.rs"
 test = false
@@ -33,14 +27,10 @@ sx127x = { path = "../sx127x" }
 defmt = "1"
 defmt-rtt = "1"
 panic-probe = { version = "1", features = ["print-defmt"] }
-fixed = "1.28"
-embedded-hal = "1"
-embedded-hal-async = "1"
 cortex-m-rt = "0.7"
-cortex-m = "0.7"
 static_cell = "2"
-log = "0.4"
 bytemuck = "1"
+board_support = { path = "../board_support" }
 
 # Embassy Crates
 embassy-executor = { version = "0.10", features = [
@@ -63,11 +53,4 @@ embassy-rp = { version = "0.10", features = [
     "rp235xa",
     "binary-info",
 ] }
-embassy-embedded-hal = { version = "0.6", features = ["defmt"] }
-embassy-usb-logger = { version = "0.6" }
-embassy-usb = { version = "0.6" }
 embassy-futures = { version = "0.1", features = ["defmt"] }
-
-# Display
-ssd1306 = { version = "0.10", features = ["async"] }
-embedded-graphics = "0.8"

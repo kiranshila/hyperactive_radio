@@ -1,13 +1,3 @@
-//! Types, constants, and tasks shared between the `tx` and `rx` binaries.
-
-use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_rp::gpio::Output;
-use embassy_rp::peripherals::SPI0;
-use embassy_rp::spi::{self, Spi};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
-use sx127x::Sx127x;
-
-pub const CLOCK_HZ: u32 = 153_600_000;
 pub const SAMPLE_RATE: u32 = 48_000;
 pub const I2S_CLK_HZ: u32 = 12_288_000;
 pub const RADIO_FREQ_HZ: u32 = 915_000_000;
@@ -26,14 +16,6 @@ pub const FRAME_SAMPLES: usize = (SAMPLE_RATE / 1000 * 20) as usize * 2;
 /// 100 kbps × 20 ms = 250 bytes on-air minus ~15 bytes framing overhead
 /// (8 preamble + 4 sync + 1 length + 2 CRC).
 pub const OPUS_BUF_SIZE: usize = 235;
-
-/// CriticalSectionRawMutex required so &'static Spi0Bus is Send across tasks.
-pub type Spi0Bus = Mutex<CriticalSectionRawMutex, Spi<'static, SPI0, spi::Async>>;
-
-// Radio type on this bus
-pub type Sx127xConcrete = Sx127x<
-    SpiDevice<'static, CriticalSectionRawMutex, Spi<'static, SPI0, spi::Async>, Output<'static>>,
->;
 
 /// Stereo interleaved i16 PCM, 20ms at 48 kHz.
 pub type AudioFrame = [i16; FRAME_SAMPLES];

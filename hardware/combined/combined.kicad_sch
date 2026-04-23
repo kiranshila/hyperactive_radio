@@ -6189,10 +6189,6 @@
 		(uuid "b5233bf4-54fc-492a-a84d-7b6ff251fb12")
 	)
 	(no_connect
-		(at 101.6 114.3)
-		(uuid "b72c1ff5-4a5e-45ff-90c9-5d2aa3355cba")
-	)
-	(no_connect
 		(at 55.88 91.44)
 		(uuid "dc53c410-ba58-4602-9206-30c67b2e5913")
 	)
@@ -6399,6 +6395,16 @@
 			(type default)
 		)
 		(uuid "1d1a212b-c949-4823-a558-f89a85fe4cad")
+	)
+	(wire
+		(pts
+			(xy 101.6 114.3) (xy 104.14 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1f63ae09-b342-4508-81bb-a36bc5659b2f")
 	)
 	(wire
 		(pts
@@ -9100,6 +9106,30 @@
 			)
 		)
 	)
+	(global_label "AMP_~{SHDN}"
+		(shape input)
+		(at 104.14 114.3 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "664869f4-838f-40f3-bd54-31750b70e367")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 117.0433 114.3 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+	)
 	(global_label "RADIO_DIO4"
 		(shape input)
 		(at 147.32 180.34 0)
@@ -10072,6 +10102,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805ZD104KAT2A"
+			(at 240.03 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "bc79c79c-b8ab-420d-b3af-9c04462520cb")
 		)
@@ -10347,6 +10388,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 199.39 58.42 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL21A106KOQNNNG "
 			(at 199.39 58.42 90)
 			(hide yes)
 			(show_name no)
@@ -10720,6 +10772,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805ZD104KAT2A"
+			(at 229.87 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "9543a409-edeb-402f-8124-c6b46634fead")
 		)
@@ -10801,6 +10864,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 210.82 128.27 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0805X105K160CT"
 			(at 210.82 128.27 90)
 			(hide yes)
 			(show_name no)
@@ -11086,6 +11160,17 @@
 				)
 			)
 		)
+		(property "MPN" "CL21A106KOQNNNG "
+			(at 130.81 151.13 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "df42f188-8bc5-4712-bc45-bcba8687cfe9")
 		)
@@ -11179,6 +11264,17 @@
 				)
 			)
 		)
+		(property "MPN" "GRM21BR61A226ME51L "
+			(at 64.77 39.37 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "f4559970-55cc-4f8c-a3aa-24afff6fc803")
 		)
@@ -11251,6 +11347,17 @@
 			)
 		)
 		(property "Description" "Resistor"
+			(at 213.36 62.23 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "RG2012P-223-B-T5"
 			(at 213.36 62.23 0)
 			(hide yes)
 			(show_name no)
@@ -11344,6 +11451,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 262.89 116.84 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "C0603C221J1HACAUTO"
 			(at 262.89 116.84 0)
 			(hide yes)
 			(show_name no)
@@ -12681,6 +12799,17 @@
 				)
 			)
 		)
+		(property "MPN" "C0603C221J1HACAUTO"
+			(at 267.97 154.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "338bbd2a-403f-4dfa-b7ff-ae3ebbd47f21")
 		)
@@ -12764,6 +12893,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 44.45 39.37 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL21A106KOQNNNG "
 			(at 44.45 39.37 0)
 			(hide yes)
 			(show_name no)
@@ -13296,6 +13436,17 @@
 				)
 			)
 		)
+		(property "MPN" "CL21A106KOQNNNG "
+			(at 170.18 97.79 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "0775f004-d837-4900-bfb8-44ce1e292709")
 		)
@@ -13612,6 +13763,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 267.97 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "C0603C221J1HACAUTO"
 			(at 267.97 142.24 0)
 			(hide yes)
 			(show_name no)
@@ -14272,6 +14434,17 @@
 				)
 			)
 		)
+		(property "MPN" "CL21A106KOQNNNG "
+			(at 209.55 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "4667515b-4d98-4b14-8941-ae24014a9354")
 		)
@@ -14511,6 +14684,17 @@
 				)
 			)
 		)
+		(property "MPN" "RG2012P-472-D-T5"
+			(at 22.86 114.3 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "cb678186-5f8e-43cc-8f72-9c4df23e2c87")
 		)
@@ -14688,6 +14872,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 138.43 38.1 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL21A106KOQNNNG "
 			(at 138.43 38.1 0)
 			(hide yes)
 			(show_name no)
@@ -14893,6 +15088,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805ZD104KAT2A"
+			(at 219.71 104.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "235dfa4f-2ee8-4bf1-94d7-7d3afddc75ff")
 		)
@@ -15051,7 +15257,7 @@
 				)
 			)
 		)
-		(property "MPN" "EC11E18244A5"
+		(property "MPN" "EC11E09244BS"
 			(at 38.1 182.88 0)
 			(hide yes)
 			(show_name no)
@@ -15062,7 +15268,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C255515"
+		(property "LCSC" "C470742"
 			(at 38.1 182.88 0)
 			(hide yes)
 			(show_name no)
@@ -15165,6 +15371,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 209.55 143.51 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0805X105K160CT"
 			(at 209.55 143.51 90)
 			(hide yes)
 			(show_name no)
@@ -15736,6 +15953,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805ZD104KAT2A"
+			(at 180.34 97.79 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "98f96507-e937-46e5-8c01-3d870c2d3476")
 		)
@@ -15807,6 +16035,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 90.17 52.07 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "RG2012P-104-B-T5"
+			(at 90.17 52.07 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16299,6 +16538,17 @@
 				)
 			)
 		)
+		(property "MPN" "CL21A106KOQNNNG "
+			(at 199.39 33.02 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "cfe65e76-22a5-428a-9624-c9b2cb8b228a")
 		)
@@ -16548,6 +16798,17 @@
 				)
 			)
 		)
+		(property "MPN" "C0603C221J1HACAUTO"
+			(at 262.89 129.54 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "11a18886-1723-4508-9a60-120008bdbc79")
 		)
@@ -16620,6 +16881,17 @@
 			)
 		)
 		(property "Description" "Resistor"
+			(at 213.36 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "RG2012P-472-D-T5"
 			(at 213.36 49.53 0)
 			(hide yes)
 			(show_name no)
@@ -16879,6 +17151,17 @@
 				)
 			)
 		)
+		(property "MPN" "CL21A106KOQNNNG "
+			(at 115.57 38.1 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "62612d59-0332-484c-a7c6-d2f4f90514fb")
 		)
@@ -16951,6 +17234,17 @@
 			)
 		)
 		(property "Description" "Resistor"
+			(at 27.94 114.3 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "RG2012P-472-D-T5"
 			(at 27.94 114.3 0)
 			(hide yes)
 			(show_name no)
@@ -17394,6 +17688,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805ZD104KAT2A"
+			(at 148.59 38.1 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "e72ed268-25c2-4d6d-b72c-0b8f0f3215b6")
 		)
@@ -17477,6 +17782,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 74.93 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0805ZD104KAT2A"
 			(at 74.93 171.45 0)
 			(hide yes)
 			(show_name no)
@@ -17881,6 +18197,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 199.39 27.94 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL21A106KOQNNNG "
 			(at 199.39 27.94 90)
 			(hide yes)
 			(show_name no)
@@ -18365,6 +18692,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805X105K160CT"
+			(at 210.82 119.38 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "365cb2e6-24e3-48fd-a88e-3645c4d02beb")
 		)
@@ -18724,6 +19062,17 @@
 				)
 			)
 		)
+		(property "MPN" "0805ZD104KAT2A"
+			(at 125.73 38.1 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "f7ad39f6-5953-43b8-b987-35f460426740")
 		)
@@ -18883,6 +19232,17 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 199.39 53.34 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL21A106KOQNNNG "
 			(at 199.39 53.34 90)
 			(hide yes)
 			(show_name no)

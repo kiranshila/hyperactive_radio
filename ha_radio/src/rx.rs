@@ -2,90 +2,82 @@
 #![no_main]
 #![feature(impl_trait_in_assoc_type)]
 
-mod shared;
-
 use {
-    crate::shared::{
-        CLOCK_HZ, FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, RADIO_BITRATE_BPS,
-        RADIO_FREQ_HZ, RADIO_SYNC_WORD, SAMPLE_RATE, Spi0Bus, Sx127xConcrete,
+    board_support::{
+        Board, I2sOutputPio, Pcm3060Board, Sx127xBoard,
+        consts::{
+            FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, RADIO_BITRATE_BPS,
+            RADIO_FREQ_HZ, RADIO_SYNC_WORD, SAMPLE_RATE,
+        },
     },
-    core::{
-        fmt::Write as _,
-        ptr::addr_of_mut,
-        sync::atomic::{AtomicI32, AtomicU32, Ordering},
-    },
+    core::ptr::addr_of_mut,
     defmt::*,
     defmt_rtt as _,
-    embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice,
     embassy_executor::Executor,
     embassy_futures::join::join,
     embassy_rp::{
         bind_interrupts,
-        clocks::ClockConfig,
         config::Config as SystemConfig,
         dma::InterruptHandler as DmaInterruptHandler,
-        gpio::{Input, Level, Output, Pull},
-        i2c::{self, I2c, InterruptHandler as I2cInterruptHandler},
+        gpio::{Input, Output},
+        i2c::InterruptHandler as I2cInterruptHandler,
         multicore::{Stack, spawn_core1},
-        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, I2C1, PIO0},
-        pio::{InterruptHandler as PioInterruptHandler, Pio},
-        pio_programs::i2s::{PioI2sOut, PioI2sOutProgram},
-        spi::{Config as SpiConfig, Spi},
+        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0},
+        pio::InterruptHandler as PioInterruptHandler,
     },
     embassy_sync::{
         blocking_mutex::raw::CriticalSectionRawMutex,
-        mutex::Mutex,
         zerocopy_channel::{Channel, Receiver, Sender},
     },
     embassy_time::Timer,
-    embedded_graphics::{
-        mono_font::{MonoTextStyleBuilder, ascii::FONT_5X8, ascii::FONT_6X10},
-        pixelcolor::BinaryColor,
-        prelude::*,
-        text::Text,
-    },
     embedded_opus::DECODER_STATE_SIZE_STEREO,
     panic_probe as _,
-    ssd1306::{I2CDisplayInterface, Ssd1306Async, prelude::*, size::DisplaySize128x32},
     static_cell::StaticCell,
-    sx127x::{GfskRxConfig, Sx127x},
+    sx127x::GfskRxConfig,
 };
+
+bind_interrupts!(struct Irqs {
+    DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
+    PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
+    I2C0_IRQ => I2cInterruptHandler<I2C0>;
+});
 
 static mut CORE1_STACK: Stack<262144> = Stack::new();
 static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
 static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
-bind_interrupts!(struct Irqs {
-    DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>;
-    PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
-    I2C1_IRQ => I2cInterruptHandler<I2C1>;
-});
-
-// ----- Shared stats (updated by radio_rx_task, read by display_task)
-
-static RSSI_DBM: AtomicI32 = AtomicI32::new(0);
-static PKT_COUNT: AtomicU32 = AtomicU32::new(0);
-static ERR_COUNT: AtomicU32 = AtomicU32::new(0);
-
-// ----- TASKS
-//
-// Three-stage pipeline across two cores.
-// Zerocopy channels with depth 2 connect adjacent stages.
+type PackedAudioFrameChannel = Channel<'static, CriticalSectionRawMutex, PackedAudioFrame>;
+type PackedAudioFrameSender = Sender<'static, CriticalSectionRawMutex, PackedAudioFrame>;
+type PackedAudioFrameReceiver = Receiver<'static, CriticalSectionRawMutex, PackedAudioFrame>;
 
 type OpusPacketChannel = Channel<'static, CriticalSectionRawMutex, OpusPacket>;
 type OpusPacketSender = Sender<'static, CriticalSectionRawMutex, OpusPacket>;
 type OpusPacketReceiver = Receiver<'static, CriticalSectionRawMutex, OpusPacket>;
 
-type PackedAudioFrameChannel = Channel<'static, CriticalSectionRawMutex, PackedAudioFrame>;
-type PackedAudioFrameSender = Sender<'static, CriticalSectionRawMutex, PackedAudioFrame>;
-type PackedAudioFrameReceiver = Receiver<'static, CriticalSectionRawMutex, PackedAudioFrame>;
+#[embassy_executor::task]
+async fn amp_enable(out_det: Input<'static>, mut amp_nshdn: Output<'static>) {
+    info!("monitoring audio out jack");
+    let mut enabled = false;
+    loop {
+        if out_det.is_low() && !enabled {
+            info!("Enabling amplifier");
+            enabled = true;
+            amp_nshdn.set_high();
+        } else if out_det.is_high() && enabled {
+            info!("Disabling amplifier");
+            enabled = false;
+            amp_nshdn.set_low();
+        }
+        Timer::after_millis(100).await;
+    }
+}
 
 /// Radio RX — Core 0.  Receives GFSK packets and forwards to the decoder.
 /// DIO0 is mapped to PayloadReady in FSK packet mode.
 #[embassy_executor::task]
 async fn radio_rx_task(
     mut tx: OpusPacketSender,
-    mut radio: Sx127xConcrete,
+    mut radio: Sx127xBoard,
     mut dio0: Input<'static>,
     mut rst: Output<'static>,
 ) {
@@ -115,25 +107,23 @@ async fn radio_rx_task(
         match radio.receive(&mut dio0, &mut pkt_buf).await {
             Ok(len) => {
                 consecutive_failures = 0;
-                let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
-                RSSI_DBM.store(rssi, Ordering::Relaxed);
                 if len > OPUS_BUF_SIZE {
-                    ERR_COUNT.fetch_add(1, Ordering::Relaxed);
                     warn!("radio: pkt too large {}", len);
                     continue;
                 }
                 info!("rx: len={}", len);
-                PKT_COUNT.fetch_add(1, Ordering::Relaxed);
-                let opus = tx.send().await;
+                let mut opus = tx.send().await;
                 opus.data[..len].copy_from_slice(&pkt_buf[..len]);
                 opus.len = len;
-                tx.send_done();
+                opus.send_done();
             }
             Err(sx127x::Error::Timeout) => {
                 consecutive_failures += 1;
                 let rssi = radio.read_rssi_dbm().await.unwrap_or(0);
-                RSSI_DBM.store(rssi, Ordering::Relaxed);
-                info!("radio: rx timeout rssi={}dBm (fail#{})", rssi, consecutive_failures);
+                info!(
+                    "radio: rx timeout rssi={}dBm (fail#{})",
+                    rssi, consecutive_failures
+                );
                 // After 5 consecutive 1-second timeouts (~5 s of silence),
                 // force a full reconfiguration.  The minimal recovery inside
                 // receive() (FifoOverrun + Mode::Rx write) may not be enough
@@ -141,7 +131,10 @@ async fn radio_rx_task(
                 // runs the proper Sleep → Standby → Rx sequence with PLL-lock
                 // wait, which is the only reliable way to recover.
                 if consecutive_failures % 5 == 0 {
-                    warn!("radio: reconfiguring after {} timeouts", consecutive_failures);
+                    warn!(
+                        "radio: reconfiguring after {} timeouts",
+                        consecutive_failures
+                    );
                     if let Err(e) = radio.configure_gfsk_rx(&gfsk_cfg).await {
                         warn!("radio: reconfigure failed: {}", defmt::Debug2Format(&e));
                     }
@@ -149,7 +142,6 @@ async fn radio_rx_task(
             }
             Err(e) => {
                 consecutive_failures += 1;
-                ERR_COUNT.fetch_add(1, Ordering::Relaxed);
                 warn!("radio: rx err {}", defmt::Debug2Format(&e));
             }
         }
@@ -164,8 +156,8 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
     let mut decoder = embedded_opus::Decoder::new(&mut state_buf, SAMPLE_RATE as i32, 2).unwrap();
     info!("decode: starting");
     loop {
-        let (opus, pcm) = join(rx.receive(), tx.send()).await;
-        let pcm: &mut [i16] = bytemuck::cast_slice_mut(pcm.as_mut_slice());
+        let (opus, mut pcm_slot) = join(rx.receive(), tx.send()).await;
+        let pcm: &mut [i16] = bytemuck::cast_slice_mut(&mut (*pcm_slot));
         match decoder.decode(&opus.data[0..opus.len], pcm, false) {
             Ok(_len) => {}
             Err(_e) => {
@@ -173,160 +165,56 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
                 decoder.plc(pcm).ok();
             }
         }
-        rx.receive_done();
-        tx.send_done();
+        opus.receive_done();
+        pcm_slot.send_done();
     }
 }
 
 /// I2S TX output — Core 0.  Plays decoded PCM on the PCM5102A DAC.
 #[embassy_executor::task]
-async fn i2s_out_task(mut i2s: PioI2sOut<'static, PIO0, 0>, mut rx: PackedAudioFrameReceiver) {
+async fn i2s_out_task(
+    mut i2s: I2sOutputPio,
+    mut codec: Pcm3060Board,
+    mut rx: PackedAudioFrameReceiver,
+) {
+    codec.reset().await.unwrap();
+    codec.dac_init().await.unwrap();
+    info!("codec configured");
+
+    // Double-buffer: pre-fetch next frame during DMA playback so the
+    // gap between DMA transfers is just a function call, not a channel wait.
+    let mut buf_a = [0u32; FRAME_SAMPLES / 2];
+    let mut buf_b = [0u32; FRAME_SAMPLES / 2];
+
+    // Prime: fill first buffer before starting playback (avoids startup clicks)
+    let slot = rx.receive().await;
+    buf_a.copy_from_slice(&*slot);
+    slot.receive_done();
+
     i2s.start();
     info!("i2s out: started");
+
     loop {
-        let buf = rx.receive().await;
-        i2s.write(buf).await;
-        rx.receive_done();
-    }
-}
+        // Play buf_a, pre-fetch into buf_b
+        let transfer = i2s.write(&buf_a);
+        let slot = rx.receive().await;
+        buf_b.copy_from_slice(&*slot);
+        slot.receive_done();
+        transfer.await;
 
-/// OLED display — Core 0.  Updates every 500ms with radio stats.
-#[embassy_executor::task]
-async fn display_task(i2c: I2c<'static, I2C1, i2c::Async>) {
-    let interface = I2CDisplayInterface::new(i2c);
-    let mut display = Ssd1306Async::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
-        .into_buffered_graphics_mode();
-    display.init().await.unwrap();
-
-    // Yellow bar (rows 0-7): 5x8 fits cleanly in 8px
-    let yellow = MonoTextStyleBuilder::new()
-        .font(&FONT_5X8)
-        .text_color(BinaryColor::On)
-        .build();
-    // Blue area (rows 8-31): 6x10 gives two rows with spacing
-    let blue = MonoTextStyleBuilder::new()
-        .font(&FONT_6X10)
-        .text_color(BinaryColor::On)
-        .build();
-
-    let mut buf = [0u8; 64];
-    loop {
-        display.clear_buffer();
-
-        let rssi = RSSI_DBM.load(Ordering::Relaxed);
-        let pkts = PKT_COUNT.load(Ordering::Relaxed);
-        let errs = ERR_COUNT.load(Ordering::Relaxed);
-
-        // Yellow bar: "HA//26" left, RSSI right
-        let mut w = FmtBuf::new(&mut buf);
-        core::write!(w, "HA//26    RSSI:{} dBm", rssi).ok();
-        Text::new(w.as_str(), Point::new(0, 7), yellow)
-            .draw(&mut display)
-            .ok();
-
-        // Blue row 1: packet count
-        w.reset();
-        core::write!(w, "Pkts: {}", pkts).ok();
-        Text::new(w.as_str(), Point::new(0, 20), blue)
-            .draw(&mut display)
-            .ok();
-
-        // Blue row 2: error count
-        w.reset();
-        core::write!(w, "Errs: {}", errs).ok();
-        Text::new(w.as_str(), Point::new(0, 31), blue)
-            .draw(&mut display)
-            .ok();
-
-        display.flush().await.ok();
-        Timer::after_secs(2).await;
-    }
-}
-
-/// Tiny no_alloc format buffer.
-struct FmtBuf<'a> {
-    buf: &'a mut [u8],
-    pos: usize,
-}
-
-impl<'a> FmtBuf<'a> {
-    fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, pos: 0 }
-    }
-    fn reset(&mut self) {
-        self.pos = 0;
-    }
-    fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.buf[..self.pos]).unwrap_or("")
-    }
-}
-
-impl core::fmt::Write for FmtBuf<'_> {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let bytes = s.as_bytes();
-        let remaining = self.buf.len() - self.pos;
-        let n = bytes.len().min(remaining);
-        self.buf[self.pos..self.pos + n].copy_from_slice(&bytes[..n]);
-        self.pos += n;
-        Ok(())
+        // Play buf_b, pre-fetch into buf_a
+        let transfer = i2s.write(&buf_b);
+        let slot = rx.receive().await;
+        buf_a.copy_from_slice(&*slot);
+        slot.receive_done();
+        transfer.await;
     }
 }
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    let mut config = SystemConfig::default();
-    config.clocks = ClockConfig::system_freq(CLOCK_HZ).unwrap();
-    let p = embassy_rp::init(config);
-    info!("rx: booting at {} Hz", CLOCK_HZ);
-
-    // Grab all the pins
-    // SX1276 (RFM95W)
-    let sck = p.PIN_2;
-    let mosi = p.PIN_3;
-    let miso = p.PIN_4;
-    let cs = p.PIN_5;
-    let dio0 = Input::new(p.PIN_6, Pull::Down); // DIO0 / G0 → PayloadReady
-    let rst = Output::new(p.PIN_7, Level::High); // RST — hardware reset
-    // SSD1306 OLED (I2C1)
-    let sda = p.PIN_14;
-    let scl = p.PIN_15;
-    // PCM5102A
-    let data_out = p.PIN_22;
-    let bck_out = p.PIN_27;
-    let lrck_out = p.PIN_28;
-
-    // ----- Configure I2C1 for the OLED display
-    let mut i2c_config = i2c::Config::default();
-    i2c_config.frequency = 400_000;
-    let i2c = I2c::new_async(p.I2C1, scl, sda, Irqs, i2c_config);
-
-    // ----- Configure SPI and the Radio
-    let mut config = SpiConfig::default();
-    config.frequency = 10_000_000;
-    let spi = Spi::new(p.SPI0, sck, mosi, miso, p.DMA_CH0, p.DMA_CH1, Irqs, config);
-    static SPI_BUS: StaticCell<Spi0Bus> = StaticCell::new();
-    let spi_bus = SPI_BUS.init(Mutex::new(spi));
-    let cs = Output::new(cs, Level::High);
-    let spi_dev = SpiDevice::new(spi_bus, cs);
-    let radio = Sx127x::new(spi_dev);
-
-    // ----- PIO I2S TX output → PCM5102A
-    let Pio {
-        mut common, sm0, ..
-    } = Pio::new(p.PIO0, Irqs);
-    let program = PioI2sOutProgram::new(&mut common);
-    let i2s = PioI2sOut::new(
-        &mut common,
-        sm0,
-        p.DMA_CH2,
-        Irqs,
-        data_out,
-        bck_out,
-        lrck_out,
-        SAMPLE_RATE,
-        16,
-        &program,
-    );
+    // Setup the board
+    let board = Board::new(SystemConfig::default(), Irqs);
 
     // ----- Set up the two zerocopy channels
 
@@ -351,7 +239,7 @@ fn main() -> ! {
 
     // ----- Core 1: Opus decoding (pure CPU, no DMA needed)
     spawn_core1(
-        p.CORE1,
+        board.core_1,
         unsafe { &mut *addr_of_mut!(CORE1_STACK) },
         move || {
             let executor1 = EXECUTOR1.init(Executor::new());
@@ -361,11 +249,13 @@ fn main() -> ! {
         },
     );
 
-    // ----- Core 0: radio RX + I2S TX output + OLED display (all DMA lives here)
+    // ----- Core 0: radio RX + I2S TX output (all DMA lives here)
     let executor0 = EXECUTOR0.init(Executor::new());
     executor0.run(|spawner| {
-        spawner.spawn(radio_rx_task(radio_opus_tx, radio, dio0, rst).unwrap());
-        spawner.spawn(i2s_out_task(i2s, opus_i2s_rx).unwrap());
-        spawner.spawn(display_task(i2c).unwrap());
+        spawner.spawn(
+            radio_rx_task(radio_opus_tx, board.radio, board.radio_d0, board.radio_rst).unwrap(),
+        );
+        spawner.spawn(i2s_out_task(board.i2s_out, board.codec, opus_i2s_rx).unwrap());
+        spawner.spawn(amp_enable(board.out_det, board.amp_nshdn).unwrap());
     })
 }

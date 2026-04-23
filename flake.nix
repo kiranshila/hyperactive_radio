@@ -8,19 +8,21 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
-  outputs = {
-    self,
-    nixpkgs,
-    crane,
-    flake-utils,
-    rust-overlay,
-    ...
-  }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      crane,
+      flake-utils,
+      rust-overlay,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
-      system: let
+      system:
+      let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [(import rust-overlay)];
+          overlays = [ (import rust-overlay) ];
         };
 
         inherit (pkgs) lib;
@@ -64,11 +66,14 @@
           ];
         };
 
-        asp_link = craneLib.buildPackage (commonArgs
+        asp_link = craneLib.buildPackage (
+          commonArgs
           // {
             cargoArtifacts = null;
-          });
-      in {
+          }
+        );
+      in
+      {
         checks = {
           inherit asp_link;
         };
@@ -77,6 +82,7 @@
           checks = self.checks.${system};
           packages = with pkgs; [
             cargo-outdated
+            cargo-machete
             probe-rs-tools
             gcc-arm-embedded
             elf2uf2-rs

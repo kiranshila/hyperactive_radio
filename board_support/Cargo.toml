@@ -1,0 +1,21 @@
+[package]
+name = "board_support"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+sx127x = { path = "../sx127x" }
+pcm3060 = { path = "../pcm3060" }
+static_cell = "2"
+
+# Embassy Crates
+embassy-sync = { version = "0.8", features = ["defmt"] }
+embassy-rp = { version = "0.10", features = [
+    "defmt",
+    "unstable-pac",
+    "time-driver",
+    "critical-section-impl",
+    "rp235xa",
+    "binary-info",
+] }
+embassy-embedded-hal = { version = "0.6", features = ["defmt"] }

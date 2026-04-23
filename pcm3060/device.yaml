@@ -1,0 +1,209 @@
+config:
+    register_address_type: u8
+    defmt_feature: defmt
+
+Reg64:
+    type: register
+    size_bits: 8
+    address: 64
+    fields:
+        mrst:
+            base: bool
+            start: 7
+            description: Mode control register reset
+        srst:
+            base: bool
+            start: 6
+            description: System reset
+        adpsv:
+            base: bool
+            start: 5
+            description: ADC power-save control
+        dapsv:
+            base: bool
+            start: 4
+            description: DAC power-save control
+        s_e:
+            base: bool
+            start: 0
+            description: VOUT configuration control
+
+Reg65:
+    type: register
+    size_bits: 8
+    address: 65
+    description: AT21, digital attenuation setting for VOUT_L
+    fields:
+        value:
+            base: uint
+            start: 0
+            end: 8
+
+Reg66:
+    type: register
+    size_bits: 8
+    address: 66
+    description: AT22, digital attenuation setting for VOUT_R
+    fields:
+        value:
+            base: uint
+            start: 0
+            end: 8
+
+Reg67:
+    type: register
+    size_bits: 8
+    address: 67
+    fields:
+        csel:
+            base: bool
+            start: 7
+            description: Clock select for DAC operation
+        m_ns:
+            base: uint
+            start: 4
+            end: 7
+            description: Audio interface mode for DAC
+            conversion:
+                name: DacMode
+                Slave: 0
+                Master768Fs: 1
+                Master512Fs: 2
+                Master384Fs: 3
+                Master256Fs: 4
+                Master192Fs: 5
+                Master128Fs: 6
+                Reserved: catch_all
+        fmt:
+            base: uint
+            start: 0
+            end: 2
+            description: Interface format for DAC
+            conversion: "crate::Format"
+
+Reg68:
+    type: register
+    size_bits: 8
+    address: 68
+    fields:
+        over:
+            base: bool
+            start: 6
+            description: Oversampling rate control
+        drev:
+            base: bool
+            start: 2
+            description: Output phase select
+        mute_r:
+            base: bool
+            start: 1
+        mute_l:
+            base: bool
+            start: 0
+
+Reg69:
+    type: register
+    size_bits: 8
+    address: 69
+    fields:
+        flt:
+            base: bool
+            start: 7
+            description: Digital filter rolloff control
+        dmf:
+            base: uint
+            start: 5
+            end: 7
+            conversion:
+                name: DeEmphasisRate
+                Rate441kHz: 0
+                Rate48kHz: 1
+                Rate32kHz: 2
+                Reserved: catch_all
+        dmc:
+            base: bool
+            start: 4
+            description: Digital de-emphasis control
+        zrev:
+            base: bool
+            start: 1
+            description: Zero-Flag polarity select
+        azro:
+            base: bool
+            start: 0
+            description: Zero-Flag function select
+
+Reg70:
+    type: register
+    size_bits: 8
+    address: 70
+    description: Digital attenuation level setting L-ch part of DOUT
+    fields:
+        value:
+            base: uint
+            start: 0
+            end: 8
+
+Reg71:
+    type: register
+    size_bits: 8
+    address: 71
+    description: Digital attenuation level setting R-ch part of DOUT
+    fields:
+        value:
+            base: uint
+            start: 0
+            end: 8
+
+Reg72:
+    type: register
+    size_bits: 8
+    address: 72
+    fields:
+        csel:
+            base: bool
+            start: 7
+            description: Clock select for ADC operation
+        m_ns:
+            base: uint
+            start: 4
+            end: 7
+            description: Audio interface mode for ADC
+            conversion:
+                name: AdcMode
+                Slave: 0
+                Master768Fs: 1
+                Master512Fs: 2
+                Master384Fs: 3
+                Master256Fs: 4
+                Reserved: catch_all
+        fmt:
+            base: uint
+            start: 0
+            end: 2
+            description: Audio interface format for ADC
+            conversion: "crate::Format"
+
+Reg73:
+    type: register
+    size_bits: 8
+    address: 73
+    fields:
+        zcdd:
+            base: bool
+            start: 4
+            description: Zero-Cross detection disable for digital attenuation
+        byp:
+            base: bool
+            start: 3
+            description: HPF bypass control
+        drev:
+            base: bool
+            start: 2
+            description: Input phase select
+        mute_r:
+            base: bool
+            start: 1
+        mute_l:
+            base: bool
+            start: 0
