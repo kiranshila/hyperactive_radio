@@ -6,10 +6,7 @@
 pub mod consts;
 pub mod i2s;
 
-use crate::{
-    consts::SAMPLE_RATE,
-    i2s::{I2sInput, I2sOutput, PioI2sInProgram, PioI2sOutProgram},
-};
+use crate::i2s::{I2sInput, I2sOutput, PioI2sInProgram, PioI2sOutProgram};
 use core::marker::PhantomData;
 use embassy_embedded_hal::shared_bus::asynch::{i2c::I2cDevice, spi::SpiDevice};
 use embassy_rp::{
@@ -142,7 +139,6 @@ where
             p.PIN_16,
             p.PIN_17,
             p.PIN_18,
-            SAMPLE_RATE,
             &i2s_out_prg,
         );
 
