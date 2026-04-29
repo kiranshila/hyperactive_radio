@@ -4,7 +4,7 @@
 
 use {
     board_support::{
-        Board, EncoderPio, I2sOutputPio, Pcm3060Board, Sx127xBoard,
+        Board, I2sOutputPio, Pcm3060Board, Sx127xBoard, VolumeEncoderPio,
         consts::{
             FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, RADIO_BITRATE_BPS,
             RADIO_FREQ_HZ, RADIO_SYNC_WORD, SAMPLE_RATE,
@@ -117,7 +117,7 @@ async fn radio_rx_task(
                         continue;
                     }
                     // info!("rx: len={}", len);
-                    // info!("rx: rssi={}dBm", rssi);
+                    // info!("rx: rssi={}dBm", radio.read_rssi_dbm().await.unwrap_or(0));
                     let mut opus = tx.send().await;
                     opus.data[..len].copy_from_slice(&pkt_buf[..len]);
                     opus.len = len;
@@ -185,35 +185,7 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
 
 /// I2S TX output — Core 0.  Plays decoded PCM on the PCM5102A DAC.
 #[embassy_executor::task]
-async fn i2s_out_task(
-    mut i2s: I2sOutputPio,
-    mut codec: Pcm3060Board,
-    mut rx: PackedAudioFrameReceiver,
-    mut encoder: EncoderPio,
-) {
-    codec.reset().await.unwrap();
-    codec.dac_init().await.unwrap();
-    info!("codec configured");
-
-    let mut apply_volume = async |buf: &mut [u32]| {
-        encoder.poll();
-        let volume = encoder.pos() as u32; // position constrained above zero, fortunately
-        for v in buf {
-            // algorithm: give each half of v 16 bits of headroom, left-shift by
-            // volume (0 to 16), then reassemble
-            let sample = *v;
-
-            let left = (sample as i32) >> 16;
-            let right = ((sample & 0xffff) as i16) as i32;
-
-            let left = left << volume;
-            let right = right << volume;
-
-            // convert back to unsigned, and reassemble
-            *v = ((left as u32) & 0xffff0000) | (((right as u32) >> 16) & 0xffff);
-        }
-    };
-
+async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
     // Double-buffer: pre-fetch next frame during DMA playback so the
     // gap between DMA transfers is just a function call, not a channel wait.
     let mut buf_a = [0u32; FRAME_SAMPLES / 2];
@@ -233,7 +205,6 @@ async fn i2s_out_task(
         let slot = rx.receive().await;
         buf_b.copy_from_slice(&*slot);
         slot.receive_done();
-        apply_volume(&mut buf_b).await;
         transfer.await;
 
         // Play buf_b, pre-fetch into buf_a
@@ -241,8 +212,28 @@ async fn i2s_out_task(
         let slot = rx.receive().await;
         buf_a.copy_from_slice(&*slot);
         slot.receive_done();
-        apply_volume(&mut buf_a).await;
         transfer.await;
+    }
+}
+
+/// Codec control task -- currently just sets the volume
+#[embassy_executor::task]
+async fn codec_control_task(mut codec: Pcm3060Board, mut volume_knob: VolumeEncoderPio) {
+    codec.reset().await.unwrap();
+    codec.dac_init().await.unwrap();
+    info!("codec configured");
+
+    loop {
+        volume_knob.poll().await;
+        let vol = volume_knob.pos();
+
+        // mute if volume is sufficiently low
+        let vol = if vol == volume_knob.min() { 0 } else { vol };
+
+        // NOTE: fine because of the type constraints
+        if let Err(_) = codec.set_volume(vol as u8).await {
+            error!("codec control: error setting volume");
+        }
     }
 }
 
@@ -287,11 +278,11 @@ fn main() -> ! {
     // ----- Core 0: radio RX + I2S TX output (all DMA lives here)
     let executor0 = EXECUTOR0.init(Executor::new());
     executor0.run(|spawner| {
+        spawner.spawn(codec_control_task(board.codec, board.volume_knob).unwrap());
         spawner.spawn(
             radio_rx_task(radio_opus_tx, board.radio, board.radio_d0, board.radio_rst).unwrap(),
         );
-        spawner
-            .spawn(i2s_out_task(board.i2s_out, board.codec, opus_i2s_rx, board.encoder).unwrap());
+        spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx).unwrap());
         spawner.spawn(amp_enable(board.out_det, board.amp_nshdn).unwrap());
     })
 }

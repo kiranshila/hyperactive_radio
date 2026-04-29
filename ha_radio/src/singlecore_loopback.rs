@@ -4,7 +4,7 @@
 
 use {
     board_support::{
-        Board, EncoderPio, I2sInputPio, I2sOutputPio,
+        Board, I2sInputPio, I2sOutputPio, Pcm3060Board, VolumeEncoderPio,
         consts::{FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, SAMPLE_RATE},
     },
     defmt::*,
@@ -136,30 +136,7 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
 }
 
 #[embassy_executor::task]
-async fn i2s_out_task(
-    mut i2s: I2sOutputPio,
-    mut rx: PackedAudioFrameReceiver,
-    mut encoder: EncoderPio,
-) {
-    let mut apply_volume = async |buf: &mut [u32]| {
-        encoder.poll();
-        let volume = encoder.pos() as u32; // position constrained above zero, fortunately
-        for v in buf {
-            // algorithm: give each half of v 16 bits of headroom, left-shift by
-            // volume (0 to 16), then reassemble
-            let sample = *v;
-
-            let left = (sample as i32) >> 16;
-            let right = ((sample & 0xffff) as i16) as i32;
-
-            let left = left << volume;
-            let right = right << volume;
-
-            // convert back to unsigned, and reassemble
-            *v = ((left as u32) & 0xffff0000) | (((right as u32) >> 16) & 0xffff);
-        }
-    };
-
+async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
     // Double-buffer: pre-fetch next frame during DMA playback so the
     // gap between DMA transfers is just a function call, not a channel wait.
     let mut buf_a = [0u32; FRAME_SAMPLES / 2];
@@ -169,7 +146,6 @@ async fn i2s_out_task(
     let slot = rx.receive().await;
     buf_a.copy_from_slice(&*slot);
     slot.receive_done();
-    apply_volume(&mut buf_a).await;
 
     i2s.start();
     info!("i2s out: started");
@@ -180,7 +156,6 @@ async fn i2s_out_task(
         let slot = rx.receive().await;
         buf_b.copy_from_slice(&*slot);
         slot.receive_done();
-        apply_volume(&mut buf_b).await;
         transfer.await;
 
         // Play buf_b, pre-fetch into buf_a
@@ -188,8 +163,29 @@ async fn i2s_out_task(
         let slot = rx.receive().await;
         buf_a.copy_from_slice(&*slot);
         slot.receive_done();
-        apply_volume(&mut buf_a).await;
         transfer.await;
+    }
+}
+
+/// Codec control task -- currently just sets the volume
+#[embassy_executor::task]
+async fn codec_control_task(mut codec: Pcm3060Board, mut volume_knob: VolumeEncoderPio) {
+    codec.reset().await.unwrap();
+    codec.dac_init().await.unwrap();
+    codec.adc_init().await.unwrap();
+    info!("codec configured");
+
+    loop {
+        volume_knob.poll().await;
+        let vol = volume_knob.pos();
+
+        // mute if volume is sufficiently low
+        let vol = if vol == volume_knob.min() { 0 } else { vol };
+
+        // NOTE: fine because of the type constraints
+        if let Err(_) = codec.set_volume(vol as u8).await {
+            error!("codec control: error setting volume");
+        }
     }
 }
 
@@ -197,12 +193,6 @@ async fn i2s_out_task(
 async fn main(spawner: Spawner) {
     // Setup the board
     let mut board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
-
-    // Spin up codec
-    board.codec.reset().await.unwrap();
-    board.codec.dac_init().await.unwrap();
-    board.codec.adc_init().await.unwrap();
-    info!("codec configured");
 
     // ----- Set up the three zero-copy channels
     // The first and last channel will exist on both sides, the middle channel represents the radio
@@ -234,10 +224,11 @@ async fn main(spawner: Spawner) {
     let (opus_i2s_tx, opus_i2s_rx) = opus_i2s_chan.split();
 
     // ----- Spawn all the tasks
+    spawner.spawn(codec_control_task(board.codec, board.volume_knob).unwrap());
     spawner.spawn(i2s_in_task(board.i2s_in, i2s_opus_tx).unwrap());
     spawner.spawn(opus_encode_task(i2s_opus_rx, encode_decode_tx).unwrap());
     spawner.spawn(opus_decode_task(encode_decode_rx, opus_i2s_tx).unwrap());
-    spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx, board.encoder).unwrap());
+    spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx).unwrap());
 
     // Output jack-controlled amp control
     info!("loopback: pipeline running, monitoring jack");

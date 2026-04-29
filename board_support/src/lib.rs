@@ -41,7 +41,7 @@ type Spi0Device = SpiDevice<'static, CriticalSectionRawMutex, Spi0, Output<'stat
 
 pub type I2sInputPio = I2sInput<'static, PIO0, 0>;
 pub type I2sOutputPio = I2sOutput<'static, PIO0, 1>;
-pub type EncoderPio = Encoder<'static, PIO1, 0, 0, 16>;
+pub type VolumeEncoderPio = Encoder<'static, PIO1, 0, 200, 255>;
 pub type Pcm3060Board = Pcm3060<I2c0Device>;
 pub type Sx127xBoard = Sx127x<Spi0Device>;
 
@@ -90,7 +90,7 @@ pub struct Board<IRQS0, IRQS1> {
     pub core_1: Peri<'static, CORE1>,
 
     /// Rotary encoder
-    pub encoder: EncoderPio,
+    pub volume_knob: VolumeEncoderPio,
 }
 
 impl<IRQS0, IRQS1> Board<IRQS0, IRQS1>
@@ -183,7 +183,7 @@ where
             mut common, sm0, ..
         } = Pio::new(p.PIO1, irqs1);
 
-        let encoder = EncoderPio::new(&mut common, sm0, p.PIN_13, p.PIN_14);
+        let encoder = VolumeEncoderPio::new(&mut common, sm0, p.PIN_13, p.PIN_14);
 
         Self {
             codec,
@@ -202,7 +202,7 @@ where
             radio_d4,
             radio_d5,
             core_1: p.CORE1,
-            encoder,
+            volume_knob: encoder,
         }
     }
 }

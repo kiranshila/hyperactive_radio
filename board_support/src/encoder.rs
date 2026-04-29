@@ -52,24 +52,20 @@ impl<'d, T: Instance, const SM: usize, const MIN: isize, const MAX: isize>
 
     /// Read a single count from the encoder. Should be called often enough to
     /// catch updates.
-    pub fn poll(&mut self) -> Direction {
-        match self.sm.rx().try_pull() {
-            None => Direction::NoChange(self.pos),
+    pub async fn poll(&mut self) -> Direction {
+        match self.sm.rx().wait_pull().await {
+            // tweaked to match the encoder we have
+            0 | 3 => {
+                self.pos = MAX.min(self.pos + 1);
+                Direction::Clockwise(self.pos)
+            }
 
-            Some(pin_state) => match pin_state {
-                // tweaked to match the encoder we have
-                0 | 3 => {
-                    self.pos = MAX.min(self.pos + 1);
-                    Direction::Clockwise(self.pos)
-                }
+            1 | 2 => {
+                self.pos = MIN.max(self.pos - 1);
+                Direction::CounterClockwise(self.pos)
+            }
 
-                1 | 2 => {
-                    self.pos = MIN.max(self.pos - 1);
-                    Direction::CounterClockwise(self.pos)
-                }
-
-                _ => Direction::NoChange(self.pos),
-            },
+            _ => Direction::NoChange(self.pos),
         }
     }
 
@@ -77,11 +73,11 @@ impl<'d, T: Instance, const SM: usize, const MIN: isize, const MAX: isize>
         self.pos
     }
 
-    pub fn min() -> isize {
+    pub fn min(&self) -> isize {
         MIN
     }
 
-    pub fn max() -> isize {
+    pub fn max(&self) -> isize {
         MAX
     }
 }
