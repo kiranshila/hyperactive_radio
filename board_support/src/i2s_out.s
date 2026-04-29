@@ -1,4 +1,5 @@
-.program i2s_in
+.program i2s_out
+    set pindirs, 1              ; set pin 0 to output
 sync_l:
     wait 0 pin 2                ; wait for LRCK low (left channel)
     set y, 1                    ; y == 1 if we're writing the L channel

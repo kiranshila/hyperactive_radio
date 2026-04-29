@@ -7,8 +7,8 @@ use embassy_rp::{
     dma::{Channel, ChannelInstance, InterruptHandler, Transfer},
     interrupt::typelevel::Binding,
     pio::{
-        Common, Config as PioConfig, Direction, FifoJoin, Instance, LoadedProgram, PioPin,
-        ShiftConfig, ShiftDirection, StateMachine,
+        Common, Config as PioConfig, Direction, FifoJoin, Instance, LoadedProgram, PinConfig,
+        PioPin, ShiftConfig, ShiftDirection, StateMachine,
         program::{pio_asm, pio_file},
     },
 };
@@ -107,7 +107,7 @@ pub(crate) struct PioI2sOutProgram<'d, PIO: Instance> {
 
 impl<'d, PIO: Instance> PioI2sOutProgram<'d, PIO> {
     pub(crate) fn new(common: &mut Common<'d, PIO>) -> Self {
-        let prg = pio_file!("src/i2s_in.s");
+        let prg = pio_file!("src/i2s_out.s");
         let prg = common.load_program(&prg.program);
         Self { prg }
     }
@@ -135,8 +135,9 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
 
         let mut cfg = PioConfig::default();
         cfg.use_program(&program.prg, &[]);
-        cfg.set_out_pins(&[&data]);
-        cfg.set_set_pins(&[&data]);
+        cfg.set_in_pins(&[&data, &bck, &lrck]);
+        cfg.set_out_pins(&[&data, &bck, &lrck]);
+        cfg.set_set_pins(&[&data, &bck, &lrck]);
         cfg.shift_out = ShiftConfig {
             threshold: 32,
             direction: ShiftDirection::Left,
@@ -145,8 +146,7 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
         cfg.fifo_join = FifoJoin::TxOnly;
 
         sm.set_config(&cfg);
-        sm.set_pin_dirs(Direction::In, &[&bck, &lrck]);
-        sm.set_pin_dirs(Direction::Out, &[&data]);
+        sm.set_pin_dirs(Direction::In, &[&data, &bck, &lrck]);
 
         Self {
             dma: Channel::new(dma, irq),
