@@ -152,14 +152,18 @@ async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
         let slot = rx.receive().await;
         buf_b.copy_from_slice(&*slot);
         slot.receive_done();
+        info!("i2s out: a started");
         transfer.await;
+        info!("i2s out: a done!");
 
         // Play buf_b, pre-fetch into buf_a
         let transfer = i2s.write(&buf_b);
         let slot = rx.receive().await;
         buf_a.copy_from_slice(&*slot);
         slot.receive_done();
+        info!("i2s out: b started");
         transfer.await;
+        info!("i2s out: b done!")
     }
 }
 

@@ -8,9 +8,9 @@ use embassy_rp::{
     interrupt::typelevel::Binding,
     pio::{
         Common, Config as PioConfig, Direction, FifoJoin, Instance, LoadedProgram, PioPin,
-        ShiftConfig, ShiftDirection, StateMachine, program::pio_asm,
+        ShiftConfig, ShiftDirection, StateMachine,
+        program::{pio_asm, pio_file},
     },
-    pio_programs::clock_divider::calculate_pio_clock_divider,
 };
 
 pub(crate) struct PioI2sInProgram<'d, PIO: Instance> {
@@ -94,12 +94,9 @@ impl<'d, P: Instance, const S: usize> I2sInput<'d, P, S> {
     }
 }
 
-//  I2S output — RP2350 drives BCK + LRCK at 64fs ("master mode")
-//
-// Side-set: sidebit0 = BCK, sidebit1 = LRCK  (side 0bLB)
+//  I2S output — RP2350 reads BCK + LRCK at 64fs ("master mode" config on the DAC)
 //
 // Each 32-bit DMA word is one stereo sample: L[31:16] | R[15:0].
-// 16 data bits + 16 zero-pad bits per channel = 32 BCK cycles per half = 64fs.
 // PCM3060 slave (24-bit I2S) sees 16 MSBs of its 24-bit window; bottom 8 bits = 0.
 //
 // PIO clock = SAMPLE_RATE × 64 × 2  (2 PIO instructions per BCK half-cycle)
@@ -110,32 +107,7 @@ pub(crate) struct PioI2sOutProgram<'d, PIO: Instance> {
 
 impl<'d, PIO: Instance> PioI2sOutProgram<'d, PIO> {
     pub(crate) fn new(common: &mut Common<'d, PIO>) -> Self {
-        let prg = pio_asm!(
-            ".side_set 2",
-            // --- Left channel (LRCK=0)
-            "    mov x, y              side 0b01", // BCK=1 — I2S 1-cycle delay before MSB
-            "left_data:",
-            "    out pins, 1           side 0b00", // BCK=0, output bit
-            "    jmp x-- left_data     side 0b01", // BCK=1
-            "    out pins, 1           side 0b00", // BCK=0, 16th (last) data bit
-            // 16 zero-pad BCK cycles to reach 64fs
-            "    set x, 14             side 0b01", // BCK=1
-            "left_pad:",
-            "    set pins, 0           side 0b00", // BCK=0, DIN=0
-            "    jmp x-- left_pad      side 0b01", // BCK=1
-            "    set pins, 0           side 0b10", // BCK=0, LRCK=1 — right channel
-            // --- Right channel (LRCK=1)
-            "    mov x, y              side 0b11", // BCK=1 — 1-cycle delay
-            "right_data:",
-            "    out pins, 1           side 0b10", // BCK=0, output bit
-            "    jmp x-- right_data    side 0b11", // BCK=1
-            "    out pins, 1           side 0b10", // BCK=0, 16th data bit
-            "    set x, 14             side 0b11", // BCK=1
-            "right_pad:",
-            "    set pins, 0           side 0b10", // BCK=0
-            "    jmp x-- right_pad     side 0b11", // BCK=1
-            "    set pins, 0           side 0b00", // BCK=0, LRCK=0 — next left
-        );
+        let prg = pio_file!("src/i2s_in.s");
         let prg = common.load_program(&prg.program);
         Self { prg }
     }
@@ -155,7 +127,6 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
         data: Peri<'d, impl PioPin>,
         bck: Peri<'d, impl PioPin>,
         lrck: Peri<'d, impl PioPin>,
-        sample_rate: u32,
         program: &PioI2sOutProgram<'d, P>,
     ) -> Self {
         let data = common.make_pio_pin(data);
@@ -163,11 +134,9 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
         let lrck = common.make_pio_pin(lrck);
 
         let mut cfg = PioConfig::default();
-        cfg.use_program(&program.prg, &[&bck, &lrck]);
+        cfg.use_program(&program.prg, &[]);
         cfg.set_out_pins(&[&data]);
         cfg.set_set_pins(&[&data]);
-        // BCK = 64fs → PIO clock = sample_rate × 64 × 2
-        cfg.clock_divider = calculate_pio_clock_divider(sample_rate * 64 * 2);
         cfg.shift_out = ShiftConfig {
             threshold: 32,
             direction: ShiftDirection::Left,
@@ -176,10 +145,8 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
         cfg.fifo_join = FifoJoin::TxOnly;
 
         sm.set_config(&cfg);
-        sm.set_pin_dirs(Direction::Out, &[&data, &bck, &lrck]);
-
-        // y = bit_depth - 2 = 14 for 16-bit
-        unsafe { sm.set_y(14) };
+        sm.set_pin_dirs(Direction::In, &[&bck, &lrck]);
+        sm.set_pin_dirs(Direction::Out, &[&data]);
 
         Self {
             dma: Channel::new(dma, irq),
