@@ -4,7 +4,7 @@
 
 use {
     board_support::{
-        Board, I2sInputPio, I2sOutputPio,
+        Board, EncoderPio, I2sInputPio, I2sOutputPio,
         consts::{FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, SAMPLE_RATE},
     },
     defmt::*,
@@ -16,7 +16,7 @@ use {
         config::Config as SystemConfig,
         dma::InterruptHandler as DmaInterruptHandler,
         i2c::InterruptHandler as I2cInterruptHandler,
-        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0},
+        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1},
         pio::InterruptHandler as PioInterruptHandler,
     },
     embassy_sync::{
@@ -31,10 +31,14 @@ use {
     static_cell::StaticCell,
 };
 
-bind_interrupts!(struct Irqs {
+bind_interrupts!(struct Irqs0 {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     I2C0_IRQ => I2cInterruptHandler<I2C0>;
+});
+
+bind_interrupts!(struct Irqs1 {
+    PIO1_IRQ_0 => PioInterruptHandler<PIO1>;
 });
 
 // ----- TASKS
@@ -132,7 +136,26 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
 }
 
 #[embassy_executor::task]
-async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
+async fn i2s_out_task(
+    mut i2s: I2sOutputPio,
+    mut rx: PackedAudioFrameReceiver,
+    mut encoder: EncoderPio,
+) {
+    let mut apply_volume = async |buf: &mut [u32]| {
+        encoder.poll();
+        let volume = encoder.pos() as u32; // position constrained above zero, fortunately
+        for v in buf {
+            /*
+            (l << 16 | r) * v
+                = (l * 0x10000 + r) * v
+                = l * 0x10000 * v + r * v
+                = (l * v) * 0x10000 + (r * v)
+                = (l * v) << 16 | (r * v)
+             */
+            *v = *v * volume;
+        }
+    };
+
     // Double-buffer: pre-fetch next frame during DMA playback so the
     // gap between DMA transfers is just a function call, not a channel wait.
     let mut buf_a = [0u32; FRAME_SAMPLES / 2];
@@ -142,6 +165,7 @@ async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
     let slot = rx.receive().await;
     buf_a.copy_from_slice(&*slot);
     slot.receive_done();
+    apply_volume(&mut buf_a).await;
 
     i2s.start();
     info!("i2s out: started");
@@ -152,6 +176,7 @@ async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
         let slot = rx.receive().await;
         buf_b.copy_from_slice(&*slot);
         slot.receive_done();
+        apply_volume(&mut buf_b).await;
         transfer.await;
 
         // Play buf_b, pre-fetch into buf_a
@@ -159,6 +184,7 @@ async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
         let slot = rx.receive().await;
         buf_a.copy_from_slice(&*slot);
         slot.receive_done();
+        apply_volume(&mut buf_a).await;
         transfer.await;
     }
 }
@@ -166,7 +192,7 @@ async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Setup the board
-    let mut board = Board::new(SystemConfig::default(), Irqs);
+    let mut board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
 
     // Spin up codec
     board.codec.reset().await.unwrap();
@@ -207,7 +233,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(i2s_in_task(board.i2s_in, i2s_opus_tx).unwrap());
     spawner.spawn(opus_encode_task(i2s_opus_rx, encode_decode_tx).unwrap());
     spawner.spawn(opus_decode_task(encode_decode_rx, opus_i2s_tx).unwrap());
-    spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx).unwrap());
+    spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx, board.encoder).unwrap());
 
     // Output jack-controlled amp control
     info!("loopback: pipeline running, monitoring jack");

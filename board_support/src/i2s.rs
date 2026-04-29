@@ -7,8 +7,8 @@ use embassy_rp::{
     dma::{Channel, ChannelInstance, InterruptHandler, Transfer},
     interrupt::typelevel::Binding,
     pio::{
-        Common, Config as PioConfig, Direction, FifoJoin, Instance, LoadedProgram, PinConfig,
-        PioPin, ShiftConfig, ShiftDirection, StateMachine,
+        Common, Config as PioConfig, Direction, FifoJoin, Instance, LoadedProgram, PioPin,
+        ShiftConfig, ShiftDirection, StateMachine,
         program::{pio_asm, pio_file},
     },
 };
