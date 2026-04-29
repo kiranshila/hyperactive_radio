@@ -4,7 +4,7 @@
 
 use {
     board_support::{
-        Board, I2sOutputPio, Pcm3060Board, Sx127xBoard,
+        Board, EncoderPio, I2sOutputPio, Pcm3060Board, Sx127xBoard,
         consts::{
             FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, RADIO_BITRATE_BPS,
             RADIO_FREQ_HZ, RADIO_SYNC_WORD, SAMPLE_RATE,
@@ -22,7 +22,7 @@ use {
         gpio::{Input, Output},
         i2c::InterruptHandler as I2cInterruptHandler,
         multicore::{Stack, spawn_core1},
-        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0},
+        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1},
         pio::InterruptHandler as PioInterruptHandler,
     },
     embassy_sync::{
@@ -36,10 +36,14 @@ use {
     sx127x::GfskRxConfig,
 };
 
-bind_interrupts!(struct Irqs {
+bind_interrupts!(struct Irqs0 {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     I2C0_IRQ => I2cInterruptHandler<I2C0>;
+});
+
+bind_interrupts!(struct Irqs1 {
+    PIO1_IRQ_0 => PioInterruptHandler<PIO1>;
 });
 
 static mut CORE1_STACK: Stack<262144> = Stack::new();
@@ -185,10 +189,30 @@ async fn i2s_out_task(
     mut i2s: I2sOutputPio,
     mut codec: Pcm3060Board,
     mut rx: PackedAudioFrameReceiver,
+    mut encoder: EncoderPio,
 ) {
     codec.reset().await.unwrap();
     codec.dac_init().await.unwrap();
     info!("codec configured");
+
+    let mut apply_volume = async |buf: &mut [u32]| {
+        encoder.poll();
+        let volume = encoder.pos() as u32; // position constrained above zero, fortunately
+        for v in buf {
+            // algorithm: give each half of v 16 bits of headroom, left-shift by
+            // volume (0 to 16), then reassemble
+            let sample = *v;
+
+            let left = (sample as i32) >> 16;
+            let right = ((sample & 0xffff) as i16) as i32;
+
+            let left = left << volume;
+            let right = right << volume;
+
+            // convert back to unsigned, and reassemble
+            *v = ((left as u32) & 0xffff0000) | (((right as u32) >> 16) & 0xffff);
+        }
+    };
 
     // Double-buffer: pre-fetch next frame during DMA playback so the
     // gap between DMA transfers is just a function call, not a channel wait.
@@ -209,6 +233,7 @@ async fn i2s_out_task(
         let slot = rx.receive().await;
         buf_b.copy_from_slice(&*slot);
         slot.receive_done();
+        apply_volume(&mut buf_b).await;
         transfer.await;
 
         // Play buf_b, pre-fetch into buf_a
@@ -216,6 +241,7 @@ async fn i2s_out_task(
         let slot = rx.receive().await;
         buf_a.copy_from_slice(&*slot);
         slot.receive_done();
+        apply_volume(&mut buf_a).await;
         transfer.await;
     }
 }
@@ -223,7 +249,7 @@ async fn i2s_out_task(
 #[cortex_m_rt::entry]
 fn main() -> ! {
     // Setup the board
-    let board = Board::new(SystemConfig::default(), Irqs);
+    let board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
 
     // ----- Set up the two zerocopy channels
 
@@ -264,7 +290,8 @@ fn main() -> ! {
         spawner.spawn(
             radio_rx_task(radio_opus_tx, board.radio, board.radio_d0, board.radio_rst).unwrap(),
         );
-        spawner.spawn(i2s_out_task(board.i2s_out, board.codec, opus_i2s_rx).unwrap());
+        spawner
+            .spawn(i2s_out_task(board.i2s_out, board.codec, opus_i2s_rx, board.encoder).unwrap());
         spawner.spawn(amp_enable(board.out_det, board.amp_nshdn).unwrap());
     })
 }

@@ -145,14 +145,18 @@ async fn i2s_out_task(
         encoder.poll();
         let volume = encoder.pos() as u32; // position constrained above zero, fortunately
         for v in buf {
-            /*
-            (l << 16 | r) * v
-                = (l * 0x10000 + r) * v
-                = l * 0x10000 * v + r * v
-                = (l * v) * 0x10000 + (r * v)
-                = (l * v) << 16 | (r * v)
-             */
-            *v = *v * volume;
+            // algorithm: give each half of v 16 bits of headroom, left-shift by
+            // volume (0 to 16), then reassemble
+            let sample = *v;
+
+            let left = (sample as i32) >> 16;
+            let right = ((sample & 0xffff) as i16) as i32;
+
+            let left = left << volume;
+            let right = right << volume;
+
+            // convert back to unsigned, and reassemble
+            *v = ((left as u32) & 0xffff0000) | (((right as u32) >> 16) & 0xffff);
         }
     };
 

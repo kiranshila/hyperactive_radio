@@ -41,7 +41,7 @@ type Spi0Device = SpiDevice<'static, CriticalSectionRawMutex, Spi0, Output<'stat
 
 pub type I2sInputPio = I2sInput<'static, PIO0, 0>;
 pub type I2sOutputPio = I2sOutput<'static, PIO0, 1>;
-pub type EncoderPio = Encoder<'static, PIO1, 0, 0, 24>;
+pub type EncoderPio = Encoder<'static, PIO1, 0, 0, 16>;
 pub type Pcm3060Board = Pcm3060<I2c0Device>;
 pub type Sx127xBoard = Sx127x<Spi0Device>;
 
