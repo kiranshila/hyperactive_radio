@@ -107,7 +107,7 @@ impl<BUS: I2c> Pcm3060<BUS> {
             .reg_67()
             .modify_async(|x| {
                 // set DAC mode to master, else we will desync with its SCK
-                x.set_m_ns(DacMode::Master128Fs);
+                x.set_m_ns(DacMode::Master256Fs);
             })
             .await?;
         self.device
