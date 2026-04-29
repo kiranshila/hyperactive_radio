@@ -135,9 +135,12 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
 
         let mut cfg = PioConfig::default();
         cfg.use_program(&program.prg, &[]);
+
+        // so that all the pin numbers agree, makes things nice
         cfg.set_in_pins(&[&data, &bck, &lrck]);
         cfg.set_out_pins(&[&data, &bck, &lrck]);
         cfg.set_set_pins(&[&data, &bck, &lrck]);
+
         cfg.shift_out = ShiftConfig {
             threshold: 32,
             direction: ShiftDirection::Left,
@@ -146,6 +149,7 @@ impl<'d, P: Instance, const S: usize> I2sOutput<'d, P, S> {
         cfg.fifo_join = FifoJoin::TxOnly;
 
         sm.set_config(&cfg);
+        // NOTE: data will be set to out in the program itself
         sm.set_pin_dirs(Direction::In, &[&data, &bck, &lrck]);
 
         Self {
