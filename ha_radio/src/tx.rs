@@ -132,7 +132,7 @@ async fn radio_transmit_task(
         frequency_hz: RADIO_FREQ_HZ,
         bitrate_bps: RADIO_BITRATE_BPS,
         fdev_hz: RADIO_FDEV_HZ,
-        tx_power_dbm: 17,
+        tx_power_dbm: 20,
         modulation_shaping: ModulationShaping::GaussianBt05,
         sync_word: RADIO_SYNC_WORD,
     };
