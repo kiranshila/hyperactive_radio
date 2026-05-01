@@ -25,6 +25,7 @@ use embassy_rp::{
     interrupt::typelevel::Binding,
     peripherals::{CORE1, DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1, SPI0},
     pio::{Instance as PioInstance, InterruptHandler as PioInterruptHandler, Pio},
+    pwm::Pwm,
     spi::{Async as SpiAsync, Config as SpiConfig, Spi},
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
@@ -90,6 +91,10 @@ pub struct Board<IRQS> {
 
     /// Rotary encoder
     pub volume_knob: VolumeEncoderPio,
+
+    // LEDs
+    pub led_1: Pwm<'static>,
+    pub led_2: Pwm<'static>,
 }
 
 impl<IRQS> Board<IRQS>
@@ -184,6 +189,9 @@ where
 
         let encoder = VolumeEncoderPio::new(&mut common, sm0, p.PIN_13, p.PIN_14);
 
+        let led_1 = Pwm::new_output_a(p.PWM_SLICE0, p.PIN_0, Default::default());
+        let led_2 = Pwm::new_output_b(p.PWM_SLICE1, p.PIN_19, Default::default());
+
         Self {
             codec,
             amp_nshdn,
@@ -201,6 +209,8 @@ where
             radio_d5,
             core_1: p.CORE1,
             volume_knob: encoder,
+            led_1,
+            led_2,
         }
     }
 }

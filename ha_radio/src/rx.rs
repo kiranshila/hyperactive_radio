@@ -24,6 +24,7 @@ use {
         multicore::{Stack, spawn_core1},
         peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1},
         pio::InterruptHandler as PioInterruptHandler,
+        pwm::{Pwm, SetDutyCycle},
     },
     embassy_sync::{
         blocking_mutex::raw::CriticalSectionRawMutex,
@@ -182,34 +183,27 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
 
 /// I2S TX output — Core 0.  Plays decoded PCM on the PCM5102A DAC.
 #[embassy_executor::task]
-async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
-    // Double-buffer: pre-fetch next frame during DMA playback so the
-    // gap between DMA transfers is just a function call, not a channel wait.
-    let mut buf_a = [0u32; FRAME_SAMPLES / 2];
-    let mut buf_b = [0u32; FRAME_SAMPLES / 2];
-
-    // Prime: fill first buffer before starting playback (avoids startup clicks)
-    let slot = rx.receive().await;
-    buf_a.copy_from_slice(&*slot);
-    slot.receive_done();
-
+async fn i2s_out_task(
+    mut i2s: I2sOutputPio,
+    mut rx: PackedAudioFrameReceiver,
+    mut led_1: Pwm<'static>,
+    mut led_2: Pwm<'static>,
+) {
     i2s.start();
     info!("i2s out: started");
-
     loop {
-        // Play buf_a, pre-fetch into buf_b
-        let transfer = i2s.write(&buf_a);
-        let slot = rx.receive().await;
-        buf_b.copy_from_slice(&*slot);
-        slot.receive_done();
-        transfer.await;
+        // Read incoming audio and write out to I2S over DMA
+        let buf = rx.receive().await;
+        i2s.write(&*buf).await;
+        // Set the LED strength based on the audio levels of the first sample
+        let r_level = (((buf[0] >> 16) as i16).abs() / i16::MAX * 100) as u8;
+        let l_level = ((buf[0] as i16).abs() / i16::MAX * 100) as u8;
 
-        // Play buf_b, pre-fetch into buf_a
-        let transfer = i2s.write(&buf_b);
-        let slot = rx.receive().await;
-        buf_a.copy_from_slice(&*slot);
-        slot.receive_done();
-        transfer.await;
+        led_1.set_duty_cycle_percent(r_level).unwrap();
+        led_2.set_duty_cycle_percent(l_level).unwrap();
+
+        // Release the slot
+        buf.receive_done();
     }
 }
 
@@ -237,7 +231,11 @@ async fn codec_control_task(mut codec: Pcm3060Board, mut volume_knob: VolumeEnco
 #[cortex_m_rt::entry]
 fn main() -> ! {
     // Setup the board
-    let board = Board::new(SystemConfig::default(), Irqs);
+    let mut board = Board::new(SystemConfig::default(), Irqs);
+
+    // Turn off LEDs initially
+    board.led_1.set_duty_cycle_percent(0).unwrap();
+    board.led_2.set_duty_cycle_percent(0).unwrap();
 
     // ----- Set up the two zerocopy channels
 
@@ -279,7 +277,7 @@ fn main() -> ! {
         spawner.spawn(
             radio_rx_task(radio_opus_tx, board.radio, board.radio_d0, board.radio_rst).unwrap(),
         );
-        spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx).unwrap());
+        spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx, board.led_1, board.led_2).unwrap());
         spawner.spawn(amp_enable(board.out_det, board.amp_nshdn).unwrap());
     })
 }
