@@ -13,6 +13,8 @@ pub const OPUS_ALLOC_FAIL: i32 = -7;
 // Encoder CTL request codes
 pub const OPUS_SET_BITRATE_REQUEST: i32 = 4002;
 pub const OPUS_SET_COMPLEXITY_REQUEST: i32 = 4010;
+pub const OPUS_SET_INBAND_FEC_REQUEST: i32 = 4012;
+pub const OPUS_SET_PACKET_LOSS_PERC_REQUEST: i32 = 4014;
 pub const OPUS_SET_IGNORE_EXTENSIONS_REQUEST: i32 = 4058;
 
 // Sentinel bitrate values

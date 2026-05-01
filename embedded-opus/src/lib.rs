@@ -96,6 +96,32 @@ impl<'buf> Encoder<'buf> {
         }
     }
 
+    pub fn set_inband_fec(&mut self, enabled: bool) -> Result<(), Error> {
+        let ret = unsafe {
+            sys::opus_encoder_ctl(self.state, sys::OPUS_SET_INBAND_FEC_REQUEST, enabled as i32)
+        };
+        if ret != sys::OPUS_OK {
+            Err(Error::from_code(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn set_packet_loss_perc(&mut self, percentage: i32) -> Result<(), Error> {
+        let ret = unsafe {
+            sys::opus_encoder_ctl(
+                self.state,
+                sys::OPUS_SET_PACKET_LOSS_PERC_REQUEST,
+                percentage,
+            )
+        };
+        if ret != sys::OPUS_OK {
+            Err(Error::from_code(ret))
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn encode(&mut self, pcm: &[i16], output: &mut [u8]) -> Result<usize, Error> {
         let frame_size = (pcm.len() / self.channels) as i32;
         let ret = unsafe {
