@@ -4,9 +4,13 @@
 #![no_main]
 
 pub mod consts;
+pub mod encoder;
 pub mod i2s;
 
-use crate::i2s::{I2sInput, I2sOutput, PioI2sInProgram, PioI2sOutProgram};
+use crate::{
+    encoder::Encoder,
+    i2s::{I2sInput, I2sOutput, PioI2sInProgram, PioI2sOutProgram},
+};
 use core::marker::PhantomData;
 use embassy_embedded_hal::shared_bus::asynch::{i2c::I2cDevice, spi::SpiDevice};
 use embassy_rp::{
@@ -19,7 +23,7 @@ use embassy_rp::{
         InterruptHandler as I2cInterruptHandler,
     },
     interrupt::typelevel::Binding,
-    peripherals::{CORE1, DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, SPI0},
+    peripherals::{CORE1, DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1, SPI0},
     pio::{Instance as PioInstance, InterruptHandler as PioInterruptHandler, Pio},
     spi::{Async as SpiAsync, Config as SpiConfig, Spi},
 };
@@ -37,6 +41,7 @@ type Spi0Device = SpiDevice<'static, CriticalSectionRawMutex, Spi0, Output<'stat
 
 pub type I2sInputPio = I2sInput<'static, PIO0, 0>;
 pub type I2sOutputPio = I2sOutput<'static, PIO0, 1>;
+pub type VolumeEncoderPio = Encoder<'static, PIO1, 0, 200, 255>;
 pub type Pcm3060Board = Pcm3060<I2c0Device>;
 pub type Sx127xBoard = Sx127x<Spi0Device>;
 
@@ -45,7 +50,7 @@ const CLOCK_FREQ_HZ: u32 = 240_000_000;
 static I2C0_BUS: StaticCell<I2c0Bus> = StaticCell::new();
 
 /// Represents all the peripherals and pins as wired on the production board
-pub struct Board<IRQS> {
+pub struct Board<IRQS0, IRQS1> {
     /// Headphone/Line Out Detect
     /// Active-low when a plug is inserted.
     pub out_det: Input<'static>,
@@ -78,23 +83,28 @@ pub struct Board<IRQS> {
     pub radio: Sx127xBoard,
 
     /// IRQ Marker
-    irqs: PhantomData<IRQS>,
+    irqs0: PhantomData<IRQS0>,
+    irqs1: PhantomData<IRQS1>,
 
     /// Core 1
     pub core_1: Peri<'static, CORE1>,
+
+    /// Rotary encoder
+    pub volume_knob: VolumeEncoderPio,
 }
 
-impl<IRQS> Board<IRQS>
+impl<IRQS0, IRQS1> Board<IRQS0, IRQS1>
 where
-    IRQS: Binding<<I2C0 as I2cInstance>::Interrupt, I2cInterruptHandler<I2C0>>
+    IRQS0: Binding<<I2C0 as I2cInstance>::Interrupt, I2cInterruptHandler<I2C0>>
         + Binding<<PIO0 as PioInstance>::Interrupt, PioInterruptHandler<PIO0>>
         + Binding<<DMA_CH0 as ChannelInstance>::Interrupt, DmaInterruptHandler<DMA_CH0>>
         + Binding<<DMA_CH1 as ChannelInstance>::Interrupt, DmaInterruptHandler<DMA_CH1>>
         + Binding<<DMA_CH2 as ChannelInstance>::Interrupt, DmaInterruptHandler<DMA_CH2>>
         + Binding<<DMA_CH3 as ChannelInstance>::Interrupt, DmaInterruptHandler<DMA_CH3>>
         + 'static,
+    IRQS1: Binding<<PIO1 as PioInstance>::Interrupt, PioInterruptHandler<PIO1>> + 'static,
 {
-    pub fn new(mut config: embassy_rp::config::Config, irqs: IRQS) -> Self {
+    pub fn new(mut config: embassy_rp::config::Config, irqs0: IRQS0, irqs1: IRQS1) -> Self {
         config.clocks = ClockConfig::system_freq(CLOCK_FREQ_HZ).unwrap();
         let p = embassy_rp::init(config);
 
@@ -104,7 +114,7 @@ where
         // Setup I2C
         let mut i2c_cfg = I2cConfig::default();
         i2c_cfg.frequency = 400_000;
-        let i2c = I2c::new_async(p.I2C0, p.PIN_21, p.PIN_20, irqs, i2c_cfg);
+        let i2c = I2c::new_async(p.I2C0, p.PIN_21, p.PIN_20, irqs0, i2c_cfg);
         let i2c_bus = I2C0_BUS.init(Mutex::new(i2c));
 
         // Setup Codec
@@ -116,14 +126,14 @@ where
             sm0,
             sm1,
             ..
-        } = Pio::new(p.PIO0, irqs);
+        } = Pio::new(p.PIO0, irqs0);
 
         let i2s_in_prg = PioI2sInProgram::new(&mut common);
         let i2s_in = I2sInput::new(
             &mut common,
             sm0,
             p.DMA_CH0,
-            irqs,
+            irqs0,
             p.PIN_26,
             p.PIN_27,
             p.PIN_28,
@@ -135,7 +145,7 @@ where
             &mut common,
             sm1,
             p.DMA_CH1,
-            irqs,
+            irqs0,
             p.PIN_16,
             p.PIN_17,
             p.PIN_18,
@@ -149,7 +159,7 @@ where
         let mut config = SpiConfig::default();
         config.frequency = 10_000_000;
         let spi = Spi::new(
-            p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, p.DMA_CH2, p.DMA_CH3, irqs, config,
+            p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, p.DMA_CH2, p.DMA_CH3, irqs0, config,
         );
         static SPI_BUS: StaticCell<Spi0Bus> = StaticCell::new();
         let spi_bus = SPI_BUS.init(Mutex::new(spi));
@@ -168,6 +178,13 @@ where
         let radio_d4 = Input::new(p.PIN_11, Pull::Down);
         let radio_d5 = Input::new(p.PIN_12, Pull::Down);
 
+        // Setup rotary encoder
+        let Pio {
+            mut common, sm0, ..
+        } = Pio::new(p.PIO1, irqs1);
+
+        let encoder = VolumeEncoderPio::new(&mut common, sm0, p.PIN_13, p.PIN_14);
+
         Self {
             codec,
             amp_nshdn,
@@ -175,7 +192,8 @@ where
             radio,
             i2s_out,
             i2s_in,
-            irqs: PhantomData,
+            irqs0: PhantomData,
+            irqs1: PhantomData,
             radio_rst,
             radio_d0,
             radio_d1,
@@ -184,6 +202,7 @@ where
             radio_d4,
             radio_d5,
             core_1: p.CORE1,
+            volume_knob: encoder,
         }
     }
 }

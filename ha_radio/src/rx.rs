@@ -4,7 +4,7 @@
 
 use {
     board_support::{
-        Board, I2sOutputPio, Pcm3060Board, Sx127xBoard,
+        Board, I2sOutputPio, Pcm3060Board, Sx127xBoard, VolumeEncoderPio,
         consts::{
             FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, RADIO_BITRATE_BPS,
             RADIO_FREQ_HZ, RADIO_SYNC_WORD, SAMPLE_RATE,
@@ -22,7 +22,7 @@ use {
         gpio::{Input, Output},
         i2c::InterruptHandler as I2cInterruptHandler,
         multicore::{Stack, spawn_core1},
-        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0},
+        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1},
         pio::InterruptHandler as PioInterruptHandler,
     },
     embassy_sync::{
@@ -36,10 +36,14 @@ use {
     sx127x::GfskRxConfig,
 };
 
-bind_interrupts!(struct Irqs {
+bind_interrupts!(struct Irqs0 {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     I2C0_IRQ => I2cInterruptHandler<I2C0>;
+});
+
+bind_interrupts!(struct Irqs1 {
+    PIO1_IRQ_0 => PioInterruptHandler<PIO1>;
 });
 
 static mut CORE1_STACK: Stack<262144> = Stack::new();
@@ -113,7 +117,7 @@ async fn radio_rx_task(
                         continue;
                     }
                     // info!("rx: len={}", len);
-                    // info!("rx: rssi={}dBm", rssi);
+                    // info!("rx: rssi={}dBm", radio.read_rssi_dbm().await.unwrap_or(0));
                     let mut opus = tx.send().await;
                     opus.data[..len].copy_from_slice(&pkt_buf[..len]);
                     opus.len = len;
@@ -181,15 +185,7 @@ async fn opus_decode_task(mut rx: OpusPacketReceiver, mut tx: PackedAudioFrameSe
 
 /// I2S TX output — Core 0.  Plays decoded PCM on the PCM5102A DAC.
 #[embassy_executor::task]
-async fn i2s_out_task(
-    mut i2s: I2sOutputPio,
-    mut codec: Pcm3060Board,
-    mut rx: PackedAudioFrameReceiver,
-) {
-    codec.reset().await.unwrap();
-    codec.dac_init().await.unwrap();
-    info!("codec configured");
-
+async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
     // Double-buffer: pre-fetch next frame during DMA playback so the
     // gap between DMA transfers is just a function call, not a channel wait.
     let mut buf_a = [0u32; FRAME_SAMPLES / 2];
@@ -220,10 +216,31 @@ async fn i2s_out_task(
     }
 }
 
+/// Codec control task -- currently just sets the volume
+#[embassy_executor::task]
+async fn codec_control_task(mut codec: Pcm3060Board, mut volume_knob: VolumeEncoderPio) {
+    codec.reset().await.unwrap();
+    codec.dac_init().await.unwrap();
+    info!("codec configured");
+
+    loop {
+        volume_knob.poll().await;
+        let vol = volume_knob.pos();
+
+        // mute if volume is sufficiently low
+        let vol = if vol == volume_knob.min() { 0 } else { vol };
+
+        // NOTE: fine because of the type constraints
+        if let Err(_) = codec.set_volume(vol as u8).await {
+            error!("codec control: error setting volume");
+        }
+    }
+}
+
 #[cortex_m_rt::entry]
 fn main() -> ! {
     // Setup the board
-    let board = Board::new(SystemConfig::default(), Irqs);
+    let board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
 
     // ----- Set up the two zerocopy channels
 
@@ -261,10 +278,11 @@ fn main() -> ! {
     // ----- Core 0: radio RX + I2S TX output (all DMA lives here)
     let executor0 = EXECUTOR0.init(Executor::new());
     executor0.run(|spawner| {
+        spawner.spawn(codec_control_task(board.codec, board.volume_knob).unwrap());
         spawner.spawn(
             radio_rx_task(radio_opus_tx, board.radio, board.radio_d0, board.radio_rst).unwrap(),
         );
-        spawner.spawn(i2s_out_task(board.i2s_out, board.codec, opus_i2s_rx).unwrap());
+        spawner.spawn(i2s_out_task(board.i2s_out, opus_i2s_rx).unwrap());
         spawner.spawn(amp_enable(board.out_det, board.amp_nshdn).unwrap());
     })
 }

@@ -94,6 +94,8 @@ impl<BUS: I2c> Pcm3060<BUS> {
 
     /// Initialize the DAC
     pub async fn dac_init(&mut self) -> Result<(), BUS::Error> {
+        self.set_volume(0).await?;
+
         self.device
             .reg_64()
             .modify_async(|x| {
@@ -103,6 +105,7 @@ impl<BUS: I2c> Pcm3060<BUS> {
                 x.set_dapsv(false);
             })
             .await?;
+
         self.device
             .reg_67()
             .modify_async(|x| {
@@ -117,6 +120,7 @@ impl<BUS: I2c> Pcm3060<BUS> {
                 x.set_dmc(false);
             })
             .await?;
+
         Ok(())
     }
 
@@ -136,6 +140,25 @@ impl<BUS: I2c> Pcm3060<BUS> {
                 x.set_m_ns(AdcMode::Master256Fs);
             })
             .await?;
+        Ok(())
+    }
+
+    /// Raw volume setting, writes directly to the register
+    pub async fn set_volume(&mut self, vol: u8) -> Result<(), BUS::Error> {
+        self.device
+            .reg_65()
+            .modify_async(|x| {
+                x.set_value(vol);
+            })
+            .await?;
+
+        self.device
+            .reg_66()
+            .modify_async(|x| {
+                x.set_value(vol);
+            })
+            .await?;
+
         Ok(())
     }
 }

@@ -4,7 +4,7 @@
 
 use {
     board_support::{
-        Board, I2sInputPio, I2sOutputPio,
+        Board, I2sInputPio, I2sOutputPio, Pcm3060Board, VolumeEncoderPio,
         consts::{FRAME_SAMPLES, OPUS_BUF_SIZE, OpusPacket, PackedAudioFrame, SAMPLE_RATE},
     },
     defmt::*,
@@ -16,7 +16,7 @@ use {
         config::Config as SystemConfig,
         dma::InterruptHandler as DmaInterruptHandler,
         i2c::InterruptHandler as I2cInterruptHandler,
-        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0},
+        peripherals::{DMA_CH0, DMA_CH1, DMA_CH2, DMA_CH3, I2C0, PIO0, PIO1},
         pio::InterruptHandler as PioInterruptHandler,
     },
     embassy_sync::{
@@ -31,10 +31,14 @@ use {
     static_cell::StaticCell,
 };
 
-bind_interrupts!(struct Irqs {
+bind_interrupts!(struct Irqs0 {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     I2C0_IRQ => I2cInterruptHandler<I2C0>;
+});
+
+bind_interrupts!(struct Irqs1 {
+    PIO1_IRQ_0 => PioInterruptHandler<PIO1>;
 });
 
 // ----- TASKS
@@ -163,16 +167,32 @@ async fn i2s_out_task(mut i2s: I2sOutputPio, mut rx: PackedAudioFrameReceiver) {
     }
 }
 
+/// Codec control task -- currently just sets the volume
+#[embassy_executor::task]
+async fn codec_control_task(mut codec: Pcm3060Board, mut volume_knob: VolumeEncoderPio) {
+    codec.reset().await.unwrap();
+    codec.dac_init().await.unwrap();
+    codec.adc_init().await.unwrap();
+    info!("codec configured");
+
+    loop {
+        volume_knob.poll().await;
+        let vol = volume_knob.pos();
+
+        // mute if volume is sufficiently low
+        let vol = if vol == volume_knob.min() { 0 } else { vol };
+
+        // NOTE: fine because of the type constraints
+        if let Err(_) = codec.set_volume(vol as u8).await {
+            error!("codec control: error setting volume");
+        }
+    }
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Setup the board
-    let mut board = Board::new(SystemConfig::default(), Irqs);
-
-    // Spin up codec
-    board.codec.reset().await.unwrap();
-    board.codec.dac_init().await.unwrap();
-    board.codec.adc_init().await.unwrap();
-    info!("codec configured");
+    let mut board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
 
     // ----- Set up the three zero-copy channels
     // The first and last channel will exist on both sides, the middle channel represents the radio
@@ -204,6 +224,7 @@ async fn main(spawner: Spawner) {
     let (opus_i2s_tx, opus_i2s_rx) = opus_i2s_chan.split();
 
     // ----- Spawn all the tasks
+    spawner.spawn(codec_control_task(board.codec, board.volume_knob).unwrap());
     spawner.spawn(i2s_in_task(board.i2s_in, i2s_opus_tx).unwrap());
     spawner.spawn(opus_encode_task(i2s_opus_rx, encode_decode_tx).unwrap());
     spawner.spawn(opus_decode_task(encode_decode_rx, opus_i2s_tx).unwrap());
