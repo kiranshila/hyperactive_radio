@@ -36,14 +36,11 @@ use {
     sx127x::{GfskConfig, ModulationShaping},
 };
 
-bind_interrupts!(struct Irqs0 {
+bind_interrupts!(struct Irqs {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
-    I2C0_IRQ => I2cInterruptHandler<I2C0>;
-});
-
-bind_interrupts!(struct Irqs1 {
     PIO1_IRQ_0 => PioInterruptHandler<PIO1>;
+    I2C0_IRQ => I2cInterruptHandler<I2C0>;
 });
 
 static mut CORE1_STACK: Stack<262144> = Stack::new();
@@ -158,7 +155,7 @@ async fn radio_transmit_task(
 #[cortex_m_rt::entry]
 fn main() -> ! {
     // Setup the board
-    let board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
+    let board = Board::new(SystemConfig::default(), Irqs);
 
     // ----- Set up the two zero-copy channels
 

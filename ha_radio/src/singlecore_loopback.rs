@@ -31,14 +31,11 @@ use {
     static_cell::StaticCell,
 };
 
-bind_interrupts!(struct Irqs0 {
+bind_interrupts!(struct Irqs {
     DMA_IRQ_0 => DmaInterruptHandler<DMA_CH0>, DmaInterruptHandler<DMA_CH1>, DmaInterruptHandler<DMA_CH2>, DmaInterruptHandler<DMA_CH3>;
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
-    I2C0_IRQ => I2cInterruptHandler<I2C0>;
-});
-
-bind_interrupts!(struct Irqs1 {
     PIO1_IRQ_0 => PioInterruptHandler<PIO1>;
+    I2C0_IRQ => I2cInterruptHandler<I2C0>;
 });
 
 // ----- TASKS
@@ -192,7 +189,7 @@ async fn codec_control_task(mut codec: Pcm3060Board, mut volume_knob: VolumeEnco
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Setup the board
-    let mut board = Board::new(SystemConfig::default(), Irqs0, Irqs1);
+    let mut board = Board::new(SystemConfig::default(), Irqs);
 
     // ----- Set up the three zero-copy channels
     // The first and last channel will exist on both sides, the middle channel represents the radio
