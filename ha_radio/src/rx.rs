@@ -192,18 +192,16 @@ async fn i2s_out_task(
     i2s.start();
     info!("i2s out: started");
     loop {
-        // Read incoming audio and write out to I2S over DMA
         let buf = rx.receive().await;
+        // Copy the first sample for LED metering before starting DMA
+        let sample = buf[0];
         i2s.write(&*buf).await;
-        // Set the LED strength based on the audio levels of the first sample
-        let r_level = (((buf[0] >> 16) as i16).abs() / i16::MAX * 100) as u8;
-        let l_level = ((buf[0] as i16).abs() / i16::MAX * 100) as u8;
+        buf.receive_done();
 
+        let r_level = (((sample >> 16) as i16).saturating_abs() / (i16::MAX / 100)) as u8;
+        let l_level = ((sample as i16).saturating_abs() / (i16::MAX / 100)) as u8;
         led_1.set_duty_cycle_percent(r_level).unwrap();
         led_2.set_duty_cycle_percent(l_level).unwrap();
-
-        // Release the slot
-        buf.receive_done();
     }
 }
 
