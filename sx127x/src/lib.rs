@@ -391,6 +391,9 @@ pub struct GfskRxConfig {
     pub bitrate_bps: u32,
     /// 4-byte sync word — must match `GfskConfig::sync_word` exactly.
     pub sync_word: [u8; 4],
+    /// Maximum payload length (variable-length mode ceiling).
+    /// The radio rejects packets whose length byte exceeds this value.
+    pub max_payload_len: u8,
 }
 
 impl<S: SpiDevice> Sx127x<S> {
@@ -579,10 +582,11 @@ impl<S: SpiDevice> Sx127x<S> {
             .write_async(|w| w.set_data_mode(true))
             .await?;
 
-        // Max payload: 255 bytes (variable mode upper bound).
+        // Max payload: variable-length mode ceiling — the radio silently
+        // discards packets whose length byte exceeds this value.
         self.device
             .payload_length()
-            .write_async(|w| w.set_value(255))
+            .write_async(|w| w.set_value(cfg.max_payload_len))
             .await?;
 
         // FIFO threshold: FifoLevel fires when FIFO has > 15 bytes.

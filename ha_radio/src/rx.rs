@@ -97,6 +97,7 @@ async fn radio_rx_task(
             frequency_hz: RADIO_FREQ_HZ,
             bitrate_bps: RADIO_BITRATE_BPS,
             sync_word: RADIO_SYNC_WORD,
+            max_payload_len: OPUS_BUF_SIZE as u8,
         };
         radio.configure_gfsk_rx(&gfsk_cfg).await.unwrap();
         info!("radio: configured for rx");
