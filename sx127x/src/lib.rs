@@ -670,7 +670,7 @@ impl<S: SpiDevice> Sx127x<S> {
         // packets, or PayloadReady for short packets that fit in the FIFO
         // entirely).  Poll every 1 ms — no tight DMA loop.
         // Times out after 1 s so callers can log diagnostics if stuck.
-        const OUTER_TIMEOUT_MS: u32 = 1_000;
+        const OUTER_TIMEOUT_MS: u32 = 100;
         let mut waited_ms = 0u32;
         loop {
             embassy_time::Timer::after_millis(1).await;
@@ -759,7 +759,7 @@ impl<S: SpiDevice> Sx127x<S> {
         // loop.  Timeout after 500 ms guards against TX dying mid-packet.
         let mut received = 0;
         let mut drain_ms = 0u32;
-        const DRAIN_TIMEOUT_MS: u32 = 500;
+        const DRAIN_TIMEOUT_MS: u32 = 100;
         let result = loop {
             match embassy_time::with_timeout(
                 embassy_time::Duration::from_millis(1),
